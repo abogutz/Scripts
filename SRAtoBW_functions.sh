@@ -21,6 +21,7 @@ FASTQ_INPUT=false
 FASTQ_ONLY=false
 GENOME_BUILD="mm10"
 KEEP_FASTQ=false
+KEEP_REPLICATES=false
 PARALLEL=false
 TRIM_READ=false
 
@@ -34,7 +35,7 @@ CODE_ARRAY=""
 DEPENDENCIES=("$HOME/edirect/esearch" "$HOME/edirect/efetch" fasterq-dump "$JAVA $TRIMMOMATIC" STAR "$BISMARK_FOLDER""bismark" bwa samtools "$JAVA $PICARD" awk bam2fastq bedGraphToBigWig bamCoverage)
 
 # Help Menu
-OPTIONS="hi:b:B:d:Df:Fg:km:M:n:N:ops:t:Tx:X"
+OPTIONS="hi:b:B:d:Df:Fg:km:M:n:N:oprs:t:Tx:X"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
@@ -58,8 +59,9 @@ HELP_FULL="\n$HELP\n
 -M\tMinimum mapping quality for bigwig generation. Default=5\n\t
 -n\tBin size for bigwig generation. Larger bins to smooth noisy\n\t\tdata. Default=1\n\t
 -N\tNormalization method for bigwigs. Accepted: CPM, RPKM\n\t\t(Default=CPM)\n\t
--s\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t
 -p\tRun SRA datasets in parallel. Main use for servers. Only\n\t\tapplicable if streamline of download to align of a SRA\n\t\tinput file.\n\t
+-r\tKeep replicates after collapsing. Default=false.\n\t
+-s\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t
 -t\tNumber of Threads to use. Default=10\n\t
 -T\tTrim .fastq files after download.\n\t"
 
@@ -141,6 +143,9 @@ function parseOptions () {
       p) #Running all SRACODES in provided input as it's separate pipeline (mainly used for server)
         PARALLEL=true
         PASS_ARG=${@//-p/}
+        ;;
+      r)
+        KEEP_REPLICATES=true
         ;;
       s)
         SMOOTH=${OPTARG}
@@ -575,7 +580,9 @@ function collapseReplicates () {
 				CURRENT=$FILE
 				echo "Merging ${FILE//_Rep*.bam}*.bam"
 				samtools merge -@ $RUN_THREAD ${FILE//_Rep*.bam/.bam} ${FILE//_Rep*.bam}*.bam
-#				rm ${FILE//Rep*.bam}*.bam
+        if [[ $KEEP_REPLICATES == false ]]; then
+				  rm ${FILE//Rep*.bam}*.bam
+        fi
         echo "Indexing BAM file..."
         samtools index ${FILE//_Rep*.bam/.bam}
 			fi
