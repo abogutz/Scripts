@@ -4,7 +4,10 @@
 ###All the data are first downloaded, then trimmed (optional), and aligned 
 
 source /media/barb/Heisenberg/Tiffany/Scripts/SRAtoBW_functions.sh
-SHELL_SCRIPT=$(pwd)/$0
+
+pushd $(dirname $0) > /dev/null
+SHELL_SCRIPT=$(pwd -P)/$(basename $0)
+popd > /dev/null
 
 ############### PIPELINE-SPECIFIC VARIABLES ###############
 
