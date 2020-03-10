@@ -3,12 +3,9 @@
 ###List of functions that can be used in various pipelines for download, align and creating track hub
 
 ##System Specific Configuration
-#Ensure function and config files are within same directory (sourcing will not work otherwise)
-pushd $(dirname "${BASH_SOURCE[0]}") > /dev/null #navigate to directory of the file
-FUNCTIONS_DIR=$(pwd -P) #get full path to the script
-popd > /dev/null #pop back to original directory
 
 #TODO: alter any system specific variables and tools path through config file
+#Ensure function and config files are within same directory (sourcing will not work otherwise)
 source $FUNCTIONS_DIR/barb.config
 
 
@@ -16,6 +13,7 @@ source $FUNCTIONS_DIR/barb.config
 CURRENT_DIRECTORY=$(pwd)
 FASTQ_DIRECTORY="./Fastq"
 
+ALLELE_SPECIFIC=false
 BAM_INPUT=false
 BAM_REALIGNMENT=false
 FASTQ_INPUT=false
@@ -36,7 +34,7 @@ CODE_ARRAY=""
 DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK $BWA $SAMTOOLS "$JAVA $MARKDUPS" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
-OPTIONS="hi:b:B:d:Df:Fg:km:M:n:N:oprs:t:Tx:X"
+OPTIONS="hi:b:B:d:Df:Fg:km:M:n:N:oprs:t:Tx:Xa"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
@@ -86,6 +84,9 @@ function parseOptions () {
         ;;
       i) #set input file
         FILENAME=${OPTARG}
+        ;;
+      a)
+        ALLELE_SPECIFIC=true
         ;;
       b) #bam input for trackhub
         BAM_INPUT=true
@@ -191,14 +192,25 @@ function parallelRun () {
           CURRENT_SET=${NAME//Rep*/Rep*}
           declare -a SUB_ARRAY=$(grep -e ${NAME//Rep*/Rep*} $INPUT_FILE | cut -f1)
           echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//Rep*/Rep}
-          $SERVER_SUBMIT $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
-#          masterDAT.sh ${CURRENT_SET//Rep*/Rep} $SUB_ARRAY
+          
+          if [[ $SERVER_SUBMIT == "" ]]; then
+            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
+          else
+            $SERVER_SUBMIT "SRAtoBW_"${CURRENT_SET//Rep*/Rep} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
+          fi
+
         fi
+
       else
         declare -a SUB_ARRAY=$SRACODE
-        echo "calling "$(basename $SHELL_SCRIPT) "on"  $NAME
-        $SERVER_SUBMIT $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
-#        masterMind $NAME $SUB_ARRAY 
+        echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
+
+        if [[ $SERVER_SUBMIT == "" ]]; then
+          $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+        else
+          $SERVER_SUBMIT "SRAtoBW"_$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+        fi
+
       fi
     done
     exit #exit the script b/c don't want to run the rest of the code on every single SRACODE again
