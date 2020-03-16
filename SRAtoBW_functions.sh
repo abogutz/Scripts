@@ -6,7 +6,7 @@
 
 #TODO: alter any system specific variables and tools path through config file
 #Ensure function and config files are within same directory (sourcing will not work otherwise)
-source $FUNCTIONS_DIR/barb.config
+source $FUNCTIONS_DIR/BRC.config
 
 
 ## Non System Specific Variables
@@ -18,23 +18,23 @@ BAM_INPUT=false
 BAM_REALIGNMENT=false
 FASTQ_INPUT=false
 FASTQ_ONLY=false
-GENOME_BUILD="mm10"
 KEEP_FASTQ=false
 KEEP_REPLICATES=false
 PARALLEL=false
 TRIM_READ=false
+
+CODE_ARRAY=""
+GENOME_BUILD="mm10"
 
 BIN_SIZE=1
 SMOOTH=0
 NORMALIZE="CPM"
 MIN_MAPPING_QUAL=5
 
-CODE_ARRAY=""
-
 DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK $BWA $SAMTOOLS "$JAVA $MARKDUPS" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
-OPTIONS="hi:b:B:d:Df:Fg:km:M:n:N:oprs:t:Tx:Xa"
+OPTIONS="hi:ab:B:d:Df:Fg:km:M:n:N:oprs:t:Tx:X"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
@@ -61,6 +61,7 @@ HELP_FULL="\n$HELP\n
 -p\tRun SRA datasets in parallel. Main use for servers. Only\n\t\tapplicable if streamline of download to align of a SRA\n\t\tinput file.\n\t
 -r\tKeep replicates after collapsing. Default=false.\n\t
 -s\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t
+-S\tUse of server in running parallel jobs. Default=FALSE\n\t\tNote: only works when option -p is also specified.\n\t
 -t\tNumber of Threads to use. Default=10\n\t
 -T\tTrim .fastq files after download.\n\t"
 
@@ -192,11 +193,14 @@ function parallelRun () {
           CURRENT_SET=${NAME//Rep*/Rep*}
           declare -a SUB_ARRAY=$(grep -e ${NAME//Rep*/Rep*} $INPUT_FILE | cut -f1)
           echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//Rep*/Rep}
-          
-          if [[ $SERVER_SUBMIT == "" ]]; then
+
+          #different calls between parallel run on a computer vs server (server will want a name associated with the job submission)
+          #-x is for the SEARCH_KEY
+          #-X is for the subset of array to be passed on
+          if [[ -z $SERVER_SUBMIT ]]; then
             $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
           else
-            $SERVER_SUBMIT "SRAtoBW_"${CURRENT_SET//Rep*/Rep} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
+            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//Rep*/Rep} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
           fi
 
         fi
@@ -205,10 +209,10 @@ function parallelRun () {
         declare -a SUB_ARRAY=$SRACODE
         echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
 
-        if [[ $SERVER_SUBMIT == "" ]]; then
+        if [[ -z $SERVER_SUBMIT ]]; then
           $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
         else
-          $SERVER_SUBMIT "SRAtoBW"_$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+          $SERVER_SUBMIT "MasterDAT"_$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
         fi
 
       fi
@@ -230,7 +234,7 @@ function masterDownload () {
     return 0 #after extracting fastq from BAM, can exit masterDownload function
   fi
  
-  if [[ $CODE_ARRAY == "" ]]; then
+  if [[ -z $CODE_ARRAY ]]; then
     INPUT_FILE=$CURRENT_DIRECTORY/${1:-$FILENAME}
     echo "createArray"
     createCodeArray
@@ -397,7 +401,7 @@ function trimReads () {
         $NAME"_trim_1.fastq.gz" $NAME"_unpaired_trim_1.fastq.gz" $NAME"_trim_2.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz" \
         ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
         SLIDINGWINDOW:4:20 \
-        MINLEN:${TRIM_MINLEN:-36}        
+        MINLEN:36        
         
         echo "Moving and renaming..."
         mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
@@ -409,7 +413,7 @@ function trimReads () {
         $JAVA $TRIMMOMATIC SE -threads 10 $FASTQ_PATH".fastq.gz" $FASTQ_PATH"_trim.fastq.gz" \
         ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
         SLIDINGWINDOW:4:20 \
-        MINLEN:${TRIM_MINLEN:-36}
+        MINLEN:36
 
 		    mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
       fi
@@ -459,37 +463,28 @@ function determinePairedFastq () {
 ### Align fastq files to using data-specific aligner
 ### $1 can be a specific dataset prefix, will only align according to that tag
 function masterAlign () {
-  if $BAM_INPUT; then #if input is either BAM/FASTQ then no download is needed - exit function
+  if $BAM_INPUT; then #if input is BAM alignment is not needed - exit function
     return 0
   fi
 
   STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
+
   BISMARK_ARGUMENTS="--chunkmbs $BISMARK_MEM --multicore $BOWTIE_THREAD --genome $BISMARK_GENOME_DIR "
   SEARCH_KEY=${1:-$SEARCH_KEY}
 
   for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*$SEARCH_KEY*fastq.gz; do
-    alignRNAwithSTAR
-    alignBSwithBismark
-    alignChIPwithBWA
+    determinePairedFastq
+    alignSTAR
+    alignBismark
+    alignBWA
+    readyBam
   done
-  
-  if [[ $KEEP_FASTQ == false ]]; then
-    echo "Not keeping fastq..."
-    local FASTQ_DIR=$CURRENT_DIRECTORY/$FASTQ_DIRECTORY
-    rm $FASTQ_DIR/*$SEARCH_KEY*fastq.gz
-
-    if [[ $(ls -1 $FASTQ_DIR | wc -l) == 0 ]]; then #if the Fastq directory isempty, then it can be removed
-      rm -r $FASTQ_DIR
-    fi
-
-  fi
 }
 
 ### Alignment of RNASeq data using STAR
-function alignRNAwithSTAR () {
+function alignSTAR () {
   if [[ $FILE == *"RNA"* ]]; then
     cd $TEMP_DIR
-    determinePairedFastq
     FILE_STAR_OUTPUT=$NAME"Aligned.out.bam"
 
     if $PAIRED_END; then
@@ -502,17 +497,15 @@ function alignRNAwithSTAR () {
     fi
 
     mv $FILE_STAR_OUTPUT $FILE_BAM
-    filterBamFile
     rm -r $SEARCH_KEY*"STAR"*
     cd $CURRENT_DIRECTORY
   fi
 }
 
 ### Alignment of BSSeq data using Bismark
-function alignBSwithBismark () {
+function alignBismark () {
   if [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"PBAT"* ]] ; then
     cd $TEMP_DIR
-    determinePairedFastq
     BISMARK_OUTPUT=$NAME"_bismark_bt2.bam"
 
     if [[ $NAME == *"PBAT"* ]] ; then
@@ -532,7 +525,6 @@ function alignBSwithBismark () {
     fi
    
     mv $BISMARK_OUTPUT $FILE_BAM
-    filterBamFile
     cleanBismark
     rm *report.txt
     cd $CURRENT_DIRECTORY
@@ -540,10 +532,9 @@ function alignBSwithBismark () {
 }
 
 ### Alignment of ChIP data with BWA
-function alignChIPwithBWA () {
+function alignBWA () {
   if [[ $FILE == *"ChIP"* ]]; then
     cd $TEMP_DIR
-    determinePairedFastq
     FILE_SAM=$NAME".sam"
     
     if $PAIRED_END; then
@@ -557,29 +548,35 @@ function alignChIPwithBWA () {
 
     echo "Converting to .bam file..."
     $SAMTOOLS view -bhS -@ $RUN_THREAD $FILE_SAM > $FILE_BAM
-    filterBamFile
     rm $FILE_SAM
     cd $CURRENT_DIRECTORY
   fi
   
 }
+### Alignment of ChIPSeq data using BT2 (for allelic specific)
+### TODO
+function alignBowtie2 () {
+  cd $TEMP_DIR
+  $BOWTIE2 -x $GENOME_DIR -p $RUN_THREAD -l $FILE_FASTQ1 $FILE_FASTQ2 --local -S $FILE"_raw.sam"
+}
 
 ### Sort and mark duplicates in BAM file after alignment
-function filterBamFile () {
+function readyBam () {
+  cd $TEMP_DIR
   FILE_SORTED_BAM=$NAME"_sort.bam"
 
-  echo "Sorting bam..."
+  echo "Sorting bam..." #sort BAM by coordinates
   $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE_SORTED_BAM $FILE_BAM
   mv $FILE_SORTED_BAM $FILE_BAM #basically changing sorted_bam to just bam
   
   echo "Marking duplicates..."
-#  $JAVA -jar $PICARD MarkDuplicates I=$FILE_BAM O=$FILE_SORTED_BAM M=temp.txt
   $JAVA $MARKDUPS I=$FILE_BAM O=$FILE_SORTED_BAM M=temp.txt
   rm temp.txt
   rm $FILE_BAM
 
   mkdir -p $CURRENT_DIRECTORY/$FOLDER_NAME
   mv $FILE_SORTED_BAM $CURRENT_DIRECTORY/$FOLDER_NAME/$FILE_BAM #basically moving and changing name from sorted_bam to just bam
+  cd $CURRENT_DIRECTORY
 }
 
 ### Searches for .bam files containing _Rep#.bam in nested directories and combines them into a single bam
@@ -659,15 +656,15 @@ function setGenome () {
   
   MOUSE="Mmu"
   RAT="Rno"
-  	
 
   case $1 in
 		"mm9") 
 			mkdir -p Track_Hub/mm9
-			CHROM_SIZES=$GENOME_DIR/$MOUSE/"mm9/mm9.sizes"
-			GENOME_FILE=$GENOME_DIR/$MOUSE/"mm9/mm9.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/$MOUSE/"mm9/mm9-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR/$MOUSE/"mm9"
+			GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
+			CHROM_SIZES=$GENOME_DIR/"mm9.sizes"
+			GENOME_FILE=$GENOME_DIR/"mm9.fa"
+			STAR_GENOME_DIR=$GENOME_DIR/"mm9-STAR"
+			BISMARK_GENOME_DIR=$GENOME_DIR
 			if [ $FASTQ_ONLY = false ]; then
 				printf "chr5\t143666090\t143666091" > Actb.bed
 				TRACK_FOLDER="./Track_Hub/mm9/"
@@ -677,10 +674,11 @@ function setGenome () {
 			fi
 			;;
 		"mm10")
-			CHROM_SIZES=$GENOME_DIR/$MOUSE/"mm10/mm10.sizes"
-			GENOME_FILE=$GENOME_DIR/$MOUSE/"mm10/mm10.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/$MOUSE/"mm10/mm10-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR/$MOUSE/"mm10"
+		  GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
+			CHROM_SIZES=$GENOME_DIR/"mm10.sizes"
+			GENOME_FILE=$GENOME_DIR/"mm10.fa"
+			STAR_GENOME_DIR=$GENOME_DIR/"mm10-STAR"
+			BISMARK_GENOME_DIR=$GENOME_DIR
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr5\t142904365\t142904366" > Actb.bed
 				TRACK_FOLDER="./Track_Hub/mm10/"
@@ -690,10 +688,11 @@ function setGenome () {
 			fi
 			;;
 		"rn6")
-			CHROM_SIZES=$GENOME_DIR/$RAT/"rn6/rn6.sizes"
-			GENOME_FILE=$GENOME_DIR/$RAT/"rn6/rn6.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/$RAT/"rn6/rn6-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR/$RAT/"rn6"
+		  GENOME_DIR=$GENOME_DIR/$RAT/$1/
+			CHROM_SIZES=$GENOME_DIR/"rn6.sizes"
+			GENOME_FILE=$GENOME_DIR/"rn6.fa"
+			STAR_GENOME_DIR=$GENOME_DIR/"rn6-STAR"
+			BISMARK_GENOME_DIR=$GENOME_DIR
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr12\t13718023\t13718024" > Actb.bed
 				TRACK_FOLDER="./Track_Hub/rn6/"
@@ -703,10 +702,11 @@ function setGenome () {
 			fi
 			;;
 		"rn5")
-			CHROM_SIZES=$GENOME_DIR/$RAT/"rn5/rn5.sizes"
-			GENOME_FILE=$GENOME_DIR/$RAT/"rn5/rn5.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/$RAT/"rn5/rn5-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR/$RAT/"rn5"
+		  GENOME_DIR=$GENOME_DIR/$RAT/$1/
+			CHROM_SIZES=$GENOME_DIR/"rn5.sizes"
+			GENOME_FILE=$GENOME_DIR/"rn5.fa"
+			STAR_GENOME_DIR=$GENOME_DIR/"rn5-STAR"
+			BISMARK_GENOME_DIR=$GENOME_DIR
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr12\t15748011\t15748012" > Actb.bed
 				TRACK_FOLDER="./Track_Hub/rn5/"
@@ -716,10 +716,11 @@ function setGenome () {
 			fi
 			;;
     "hg19")
-			CHROM_SIZES=$GENOME_DIR"Hsa/hg19/hg19.sizes"
-			GENOME_FILE=$GENOME_DIR"Hsa/hg19/hg19.fa"
-			STAR_GENOME_DIR=$GENOME_DIR"Hsa/hg19/hg19-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR"Hsa/hg19"
+      GENOME_DIR=$GENOME_DIR/"Hsa"/$1/
+			CHROM_SIZES=$GENOME_DIR/"hg19.sizes"
+			GENOME_FILE=$GENOME_DIR/"hg19.fa"
+			STAR_GENOME_DIR=$GENOME_DIR/"hg19-STAR"
+			BISMARK_GENOME_DIR=$GENOME_DIR
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr7\t5527531\t5527532" > Actb.bed
 				TRACK_FOLDER="./Track_Hub/hg19/"
@@ -729,10 +730,11 @@ function setGenome () {
 			fi
 			;;
 		"oryCun2")
-			CHROM_SIZES=$GENOME_DIR"oryCun/oryCun2/oryCun2.sizes"
-			GENOME_FILE=$GENOME_DIR"oryCun/oryCun2/oryCun2.fa"
-			STAR_GENOME_DIR=$GENOME_DIR"oryCun/oryCun2/oryCun2-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR"oryCun/oryCun2"
+		  GENOME_DIR=$GENOME_DIR/"oryCun"/$1/
+			CHROM_SIZES=$GENOME_DIR/"oryCun2.sizes"
+			GENOME_FILE=$GENOME_DIR/"oryCun2.fa"
+			STAR_GENOME_DIR=$GENOME_DIR/"oryCun2-STAR"
+			BISMARK_GENOME_DIR=$GENOME_DIR
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr7\t87232876\t87232877" > Actb.bed
 				TRACK_FOLDER="./Track_Hub/oryCun2/"
@@ -742,10 +744,11 @@ function setGenome () {
 			fi
 			;;
 		"mesAur1")
-			CHROM_SIZES=$GENOME_DIR"mesAur/mesAur1/mesAur1.sizes"
-			GENOME_FILE=$GENOME_DIR"mesAur/mesAur1/mesAur1.fa"
-			STAR_GENOME_DIR=$GENOME_DIR"mesAur/mesAur1/mesAur1-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR"mesAur/mesAur1"
+		  GENOME_DIR=$GENOME_DIR/"mesAur"/$1/
+			CHROM_SIZES=$GENOME_DIR/"mesAur1.sizes"
+			GENOME_FILE=$GENOME_DIR/"mesAur1.fa"
+			STAR_GENOME_DIR=$GENOME_DIR/"mesAur1-STAR"
+			BISMARK_GENOME_DIR=$GENOME_DIR
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "KB708222.1\t2764075\t2764076" > Actb.bed
 				TRACK_FOLDER="./Track_Hub/mesAur1/"
@@ -767,6 +770,19 @@ function setGenome () {
 #	rm $TEMP_DIR/*tab
 #	rm -r $TEMP_DIR/*"STAR"*
 #}
+
+function cleanFASTQ () {
+  if [[ $KEEP_FASTQ == false ]]; then
+    echo "Not keeping fastq..."
+    local FASTQ_DIR=$CURRENT_DIRECTORY/$FASTQ_DIRECTORY
+    rm $FASTQ_DIR/*$SEARCH_KEY*fastq.gz
+
+    if [[ $(ls -1 $FASTQ_DIR | wc -l) == 0 ]]; then #if the Fastq directory isempty, then it can be removed
+      rm -r $FASTQ_DIR
+    fi
+
+  fi
+}
 
 function cleanBAMS () { # Remove noncanonical chr alignments
 	TEMP=$TEMP_DIR/"temp.bam"
