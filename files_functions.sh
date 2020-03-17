@@ -1,5 +1,7 @@
 #! /bin/bash
 
+source $FUNCTIONS_DIR/BRC.config
+
 CURRENT_DIRECTORY=$(pwd)
 
 ### Using BW files to obtain counts & average over given BED file
@@ -14,7 +16,7 @@ function avgOverBed () {
     OUT_FILE=$(basename $FILE)
     OUT_FILE=${OUT_FILE//.bw/}
     echo "Calculating $OUT_FILE average over $OUTPUT_SUFFIX..."
-    bigWigAverageOverBed $FILE $BEDFILE $OUTPUT_DIR/$OUT_FILE"_AvgOver"$OUTPUT_SUFFIX".bed"
+    $BWAVGOVERBED $FILE $BEDFILE $OUTPUT_DIR/$OUT_FILE"_AvgOver"$OUTPUT_SUFFIX".bed"
   done
   cd $CURRENT_DIRECTORY
 }
@@ -37,10 +39,10 @@ function bam2rpkm () {
     FILE=$(basename $BAM)
     SAMPLE=${FILE%%.*}"_RPKM"
     echo Sample is $SAMPLE
-    TOTAL_READS=$(samtools idxstats $BAM | awk -F '\t' '{s+=$3}END{print s}')
+    TOTAL_READS=$(SAMTOOLS idxstats $BAM | awk -F '\t' '{s+=$3}END{print s}')
     echo The number of reads is $TOTAL_READS
 
-    bedtools multicov -bams $BAM -bed $BED \
+    $BEDTOOLS multicov -bams $BAM -bed $BED \
     | awk 'BEGIN {OFS="\t"; print "chr", "start", "end", "name", "'$SAMPLE'"} {print $1, $2, $3, $4, ($5*1000000000)/(($3-$2)*'$TOTAL_READS');}' \
     | cut -f5 | paste $OUTFILE - > $TEMP_FILE
     
