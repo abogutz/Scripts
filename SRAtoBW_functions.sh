@@ -20,8 +20,8 @@ FASTQ_INPUT=false
 FASTQ_ONLY=false
 KEEP_FASTQ=false
 KEEP_REPLICATES=false
-PARALLEL=false
 TRIM_READ=false
+USE_SERVER=false
 
 CODE_ARRAY=""
 GENOME_BUILD="mm10"
@@ -34,7 +34,7 @@ MIN_MAPPING_QUAL=5
 DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK $BWA $SAMTOOLS "$JAVA $MARKDUPS" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
-OPTIONS="hi:ab:B:d:Df:Fg:km:M:n:N:oprs:t:Tx:X"
+OPTIONS="hi:ab:B:d:Df:Fg:km:M:n:N:ors:St:Tx:X"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
@@ -58,10 +58,9 @@ HELP_FULL="\n$HELP\n
 -M\tMinimum mapping quality for bigwig generation. Default=5\n\t
 -n\tBin size for bigwig generation. Larger bins to smooth noisy\n\t\tdata. Default=1\n\t
 -N\tNormalization method for bigwigs. Accepted: CPM, RPKM\n\t\t(Default=CPM)\n\t
--p\tRun SRA datasets in parallel. Main use for servers. Only\n\t\tapplicable if streamline of download to align of a SRA\n\t\tinput file.\n\t
 -r\tKeep replicates after collapsing. Default=false.\n\t
 -s\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t
--S\tUse of server in running parallel jobs. Default=FALSE\n\t\tNote: only works when option -p is also specified.\n\t
+-S\tUse of server to submit parallel jobs. Default=FALSE\n\t
 -t\tNumber of Threads to use. Default=10\n\t
 -T\tTrim .fastq files after download.\n\t"
 
@@ -138,20 +137,20 @@ function parseOptions () {
         ;;
       N)
         NORMALIZE=${OPTARG}
-        if [[ $NORMALIZE != "CPM" ]] && [[ $NORMALIZE != "RPKM" ]] ; then
+        if [[ $NORMALIZE != " " ]] && [[ $NORMALIZE != "RPKM" ]] ; then
           echo "Not an acceptable normalization method."
           exit 1
         fi
-        ;;
-      p) #Running all SRACODES in provided input as it's separate pipeline (mainly used for server)
-        PARALLEL=true
-        PASS_ARG=${@//-p/}
         ;;
       r)
         KEEP_REPLICATES=true
         ;;
       s)
         SMOOTH=${OPTARG}
+        ;;
+      S)
+        USE_SERVER=true
+        PASS_ARG=$@
         ;;
       t)
         RUN_THREAD=${OPTARG}
@@ -179,46 +178,43 @@ function parseOptions () {
 
 ### Create subset of SRACODE array to be used in parallel running
 function parallelRun () {
-  if $PARALLEL; then
-
-    INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
-    createCodeArray
-    CURRENT_SET=""
+  INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
+  createCodeArray
+  CURRENT_SET=""
   
-    for code in $CODE_ARRAY; do
-      SRACODE=$code
-      NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
-      if [[ $NAME == *"Rep"* ]] ; then
-        if [[ $CURRENT_SET != ${NAME//Rep*/Rep*} ]]; then
-          CURRENT_SET=${NAME//Rep*/Rep*}
-          declare -a SUB_ARRAY=$(grep -e ${NAME//Rep*/Rep*} $INPUT_FILE | cut -f1)
-          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//Rep*/Rep}
+  for code in $CODE_ARRAY; do
+    SRACODE=$code
+    NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
+    if [[ $NAME == *"Rep"* ]] ; then
+      if [[ $CURRENT_SET != ${NAME//Rep*/Rep*} ]]; then
+        CURRENT_SET=${NAME//Rep*/Rep*}
+        declare -a SUB_ARRAY=$(grep -e ${NAME//Rep*/Rep*} $INPUT_FILE | cut -f1)
+        echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//Rep*/Rep}
 
-          #different calls between parallel run on a computer vs server (server will want a name associated with the job submission)
-          #-x is for the SEARCH_KEY
-          #-X is for the subset of array to be passed on
-          if [[ -z $SERVER_SUBMIT ]]; then
-            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
-          else
-            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//Rep*/Rep} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
-          fi
-
-        fi
-
-      else
-        declare -a SUB_ARRAY=$SRACODE
-        echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
-
-        if [[ -z $SERVER_SUBMIT ]]; then
-          $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+        #different calls between parallel run on a computer vs server (server will want a name associated with the job submission)
+        #-x is for the SEARCH_KEY
+        #-X is for the subset of array to be passed on
+        if $USE_SERVER ; then
+          $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//Rep*/Rep} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
         else
-          $SERVER_SUBMIT "MasterDAT"_$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+          $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
         fi
-
       fi
-    done
-    exit #exit the script b/c don't want to run the rest of the code on every single SRACODE again
-  fi
+
+    else
+      declare -a SUB_ARRAY=$SRACODE
+      echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
+
+      if $USE_SERVER ; then
+        $SERVER_SUBMIT "MasterDAT"_$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+      else
+        $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+      fi
+
+    fi
+  done
+  exit #exit the script b/c don't want to run the rest of the code on every single SRACODE again
+
 }
 
 ### Downloading files specified from the tab-delimited file to fastq files
@@ -234,9 +230,8 @@ function masterDownload () {
     return 0 #after extracting fastq from BAM, can exit masterDownload function
   fi
  
-  if [[ -z $CODE_ARRAY ]]; then
-    INPUT_FILE=$CURRENT_DIRECTORY/${1:-$FILENAME}
-    echo "createArray"
+  if [[ -z $CODE_ARRAY ]]; then #this will basically only be used if the function was called by itself (may delete later)
+    INPUT_FILE=$CURRENT_DIRECTORY/$1
     createCodeArray
   fi
   
@@ -450,6 +445,7 @@ function determinePairedFastq () {
     FILE_FASTQ=$FASTQ_PATH".fastq.gz"
   fi
 
+  FILE_RAW_BAM=$NAME"_raw.bam"
   FILE_BAM=$NAME".bam"
   
   if [[ $NAME == *"Rep"* ]] ; then
@@ -496,7 +492,7 @@ function alignSTAR () {
       $STAR $STAR_ARGUMENTS --readFilesIn $FILE_FASTQ --outFileNamePrefix $NAME
     fi
 
-    mv $FILE_STAR_OUTPUT $FILE_BAM
+    mv $FILE_STAR_OUTPUT $FILE_RAW_BAM
     rm -r $SEARCH_KEY*"STAR"*
     cd $CURRENT_DIRECTORY
   fi
@@ -524,7 +520,7 @@ function alignBismark () {
       $BISMARK $BISMARK_ARGUMENTS $FILE_FASTQ
     fi
    
-    mv $BISMARK_OUTPUT $FILE_BAM
+    mv $BISMARK_OUTPUT $FILE_RAW_BAM
     cleanBismark
     rm *report.txt
     cd $CURRENT_DIRECTORY
@@ -536,7 +532,7 @@ function alignBWA () {
   if [[ $FILE == *"ChIP"* ]]; then
     cd $TEMP_DIR
     FILE_SAM=$NAME".sam"
-    
+     
     if $PAIRED_END; then
       echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
       $BWA mem -t $RUN_THREAD $GENOME_FILE $FILE_FASTQ1 $FILE_FASTQ2 > $FILE_SAM
@@ -547,7 +543,7 @@ function alignBWA () {
     fi
 
     echo "Converting to .bam file..."
-    $SAMTOOLS view -bhS -@ $RUN_THREAD $FILE_SAM > $FILE_BAM
+    $SAMTOOLS view -bhS -@ $RUN_THREAD $FILE_SAM > $FILE_RAW_BAM
     rm $FILE_SAM
     cd $CURRENT_DIRECTORY
   fi
@@ -566,16 +562,15 @@ function readyBam () {
   FILE_SORTED_BAM=$NAME"_sort.bam"
 
   echo "Sorting bam..." #sort BAM by coordinates
-  $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE_SORTED_BAM $FILE_BAM
-  mv $FILE_SORTED_BAM $FILE_BAM #basically changing sorted_bam to just bam
-  
+  $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE_SORTED_BAM $FILE_RAW_BAM
+    
   echo "Marking duplicates..."
-  $JAVA $MARKDUPS I=$FILE_BAM O=$FILE_SORTED_BAM M=temp.txt
+  $JAVA $MARKDUPS I=$FILE_SORTED_BAM O=$FILE_BAM M=temp.txt
   rm temp.txt
-  rm $FILE_BAM
+  rm $FILE_SORTED_BAM
 
   mkdir -p $CURRENT_DIRECTORY/$FOLDER_NAME
-  mv $FILE_SORTED_BAM $CURRENT_DIRECTORY/$FOLDER_NAME/$FILE_BAM #basically moving and changing name from sorted_bam to just bam
+  mv $FILE_BAM $CURRENT_DIRECTORY/$FOLDER_NAME/
   cd $CURRENT_DIRECTORY
 }
 
@@ -674,7 +669,7 @@ function setGenome () {
 			fi
 			;;
 		"mm10")
-		  GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
+		  GENOME_DIR=$GENOME_DIR/$1/ #currently BRC version
 			CHROM_SIZES=$GENOME_DIR/"mm10.sizes"
 			GENOME_FILE=$GENOME_DIR/"mm10.fa"
 			STAR_GENOME_DIR=$GENOME_DIR/"mm10-STAR"
