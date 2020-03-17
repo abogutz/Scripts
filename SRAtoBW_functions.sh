@@ -20,6 +20,7 @@ FASTQ_INPUT=false
 FASTQ_ONLY=false
 KEEP_FASTQ=false
 KEEP_REPLICATES=false
+PARALLEL=false
 TRIM_READ=false
 USE_SERVER=false
 
@@ -83,6 +84,8 @@ function parseOptions () {
         exit
         ;;
       i) #set input file
+        PARALLEL=true
+        PASS_ARG=$@" -p"
         FILENAME=${OPTARG}
         ;;
       a)
@@ -142,6 +145,9 @@ function parseOptions () {
           exit 1
         fi
         ;;
+      p) #pass as an option after the first round has run thru (prevent from looping on parallel run)
+        PARALLEL=false
+        ;; 
       r)
         KEEP_REPLICATES=true
         ;;
@@ -150,7 +156,6 @@ function parseOptions () {
         ;;
       S)
         USE_SERVER=true
-        PASS_ARG=$@
         ;;
       t)
         RUN_THREAD=${OPTARG}
@@ -178,42 +183,43 @@ function parseOptions () {
 
 ### Create subset of SRACODE array to be used in parallel running
 function parallelRun () {
-  INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
-  createCodeArray
-  CURRENT_SET=""
+  if $PARALLEL; then
+
+    INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
+    createCodeArray
+    CURRENT_SET=""
   
-  for code in $CODE_ARRAY; do
-    SRACODE=$code
-    NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
-    if [[ $NAME == *"Rep"* ]] ; then
-      if [[ $CURRENT_SET != ${NAME//Rep*/Rep*} ]]; then
-        CURRENT_SET=${NAME//Rep*/Rep*}
-        declare -a SUB_ARRAY=$(grep -e ${NAME//Rep*/Rep*} $INPUT_FILE | cut -f1)
-        echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//Rep*/Rep}
+    for code in $CODE_ARRAY; do
+      SRACODE=$code
+      NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
+      if [[ $NAME == *"Rep"* ]] ; then
+        if [[ $CURRENT_SET != ${NAME//Rep*/Rep*} ]]; then
+          CURRENT_SET=${NAME//Rep*/Rep*}
+          declare -a SUB_ARRAY=$(grep -e ${NAME//Rep*/Rep*} $INPUT_FILE | cut -f1)
+          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//Rep*/Rep}
+          
+          if $USE_SERVER ; then
+            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//Rep*/Rep} $SHELL_SCRIPT $PASS_ARG ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
+          else
+            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
+          fi
 
-        #different calls between parallel run on a computer vs server (server will want a name associated with the job submission)
-        #-x is for the SEARCH_KEY
-        #-X is for the subset of array to be passed on
-        if $USE_SERVER ; then
-          $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//Rep*/Rep} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
-        else
-          $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
         fi
-      fi
 
-    else
-      declare -a SUB_ARRAY=$SRACODE
-      echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
-
-      if $USE_SERVER ; then
-        $SERVER_SUBMIT "MasterDAT"_$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
       else
-        $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
-      fi
+        declare -a SUB_ARRAY=$SRACODE
+        echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
 
-    fi
-  done
-  exit #exit the script b/c don't want to run the rest of the code on every single SRACODE again
+        if $USE_SERVER ; then
+          $SERVER_SUBMIT "MasterDAT"_$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+        else
+          $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+        fi
+
+      fi
+    done
+    exit #exit the script b/c don't want to run the rest of the code on every single SRACODE again
+  fi
 
 }
 
