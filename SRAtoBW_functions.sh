@@ -196,13 +196,14 @@ function parallelRun () {
     for code in $CODE_ARRAY; do
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
-      if [[ $NAME == *"[Rr]ep"* ]] ; then
+      if [[ $NAME == *[Rr]ep* ]] ; then
         if [[ $CURRENT_SET != ${NAME//[Rr]ep*/[Rr]ep*} ]]; then
           CURRENT_SET=${NAME//[Rr]ep*/[Rr]ep*}
           declare -a SUB_ARRAY=$(grep -e ${NAME//[Rr]ep*/[Rr]ep*} $INPUT_FILE | cut -f1)
           echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//[Rr]ep*/[Rr]ep}
           
           if $USE_SERVER; then
+            echo "Submitting on server"
             $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//[Rr]ep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//[Rr]ep*/[Rr]ep} -X $SUB_ARRAY
           else
             $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//[Rr]ep*/[Rr]ep} -X $SUB_ARRAY
@@ -215,7 +216,8 @@ function parallelRun () {
         echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
 
         if $USE_SERVER ; then
-          $SERVER_SUBMIT "MasterDAT"_$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+          echo "Submitting on server"
+          $SERVER_SUBMIT "MasterDAT_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
         else
           $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
         fi
@@ -462,7 +464,7 @@ function determinePairedFastq () {
   FILE_RAW_BAM=$NAME"_raw.bam"
   FILE_BAM=$NAME".bam"
   
-  if [[ $NAME == *"[Rr]ep"* ]] ; then
+  if [[ $NAME == *[Rr]ep* ]] ; then
     X=${NAME%_*} #removing the "_Rep"
     FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
   else
