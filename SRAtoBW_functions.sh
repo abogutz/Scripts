@@ -8,6 +8,7 @@
 #Ensure function and config files are within same directory (sourcing will not work otherwise)
 source $FUNCTIONS_DIR/BRC.config
 
+shopt -s nocasematch #turning off case matching 
 
 ## Non System Specific Variables
 CURRENT_DIRECTORY=$(pwd)
@@ -22,6 +23,7 @@ KEEP_FASTQ=false
 KEEP_REPLICATES=false
 PARALLEL=false
 TRIM_READ=false
+USE_BOWTIE=false
 USE_SERVER=false
 
 CODE_ARRAY=""
@@ -35,7 +37,7 @@ MIN_MAPPING_QUAL=5
 DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK $BWA $SAMTOOLS "$JAVA $MARKDUPS" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
-OPTIONS="hi:ab:B:d:Df:Fg:km:M:n:N:ors:St:Tx:X"
+OPTIONS="hi:ab:B:d:Df:Fg:km:M:n:N:ors:St:Tux:X"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
@@ -63,7 +65,8 @@ HELP_FULL="\n$HELP\n
 -s\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t
 -S\tUse of server to submit parallel jobs. Default=FALSE\n\t
 -t\tNumber of Threads to use. Default=10\n\t
--T\tTrim .fastq files after download.\n\t"
+-T\tTrim .fastq files after download.\n\t
+-u\tChanging ChIPseq aligner to bowtie2. Default=BWA\n\t"
 
 
 
@@ -85,7 +88,7 @@ function parseOptions () {
         ;;
       i) #set input file
         PARALLEL=true
-        PASS_ARG=$@" -p"
+        PASS_ARG=$@
         FILENAME=${OPTARG}
         ;;
       a)
@@ -145,9 +148,6 @@ function parseOptions () {
           exit 1
         fi
         ;;
-      p) #pass as an option after the first round has run thru (prevent from looping on parallel run)
-        PARALLEL=false
-        ;; 
       r)
         KEEP_REPLICATES=true
         ;;
@@ -163,7 +163,10 @@ function parseOptions () {
       T) #trimming fastq by default parameters
         TRIM_READ=true
         ;;
+      u)
+        USE_BOWTIE=true
       x)
+        PARALLEL=false
         SEARCH_KEY=${OPTARG}
         echo "Search key for the set: $SEARCH_KEY"
         ;;
@@ -192,16 +195,16 @@ function parallelRun () {
     for code in $CODE_ARRAY; do
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
-      if [[ $NAME == *"[Rr]ep"* ]] ; then
-        if [[ $CURRENT_SET != ${NAME//[Rr]ep*/[Rr]ep*} ]]; then
-          CURRENT_SET=${NAME//[Rr]ep*/[Rr]ep*}
-          declare -a SUB_ARRAY=$(grep -e ${NAME//[Rr]ep*/[Rr]ep*} $INPUT_FILE | cut -f1)
-          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//[Rr]ep*/[Rr]ep}
+      if [[ $NAME == *"Rep"* ]] ; then
+        if [[ $CURRENT_SET != ${NAME//Rep*/Rep*} ]]; then
+          CURRENT_SET=${NAME//Rep*/Rep*}
+          declare -a SUB_ARRAY=$(grep -e ${NAME//Rep*/Rep*} $INPUT_FILE | cut -f1)
+          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//Rep*/Rep}
           
           if $USE_SERVER ; then
-            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//[Rr]ep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//[Rr]ep*/[Rr]ep} -X $SUB_ARRAY
+            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//Rep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
           else
-            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//[Rr]ep*/[Rr]ep} -X $SUB_ARRAY
+            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
           fi
 
         fi
@@ -316,6 +319,10 @@ function extractType() {
        [[ $NAME != *"BSSeq"* ]] && \
        [[ $NAME != *"PBAT"* ]] ; then
        NAME="BSSeq_"$NAME
+
+  elif [[ $TYPE == "DNase-Hypersensitivity" ]] && \
+       [[ $NAME != *"DNase"* ]]; then
+       NAME="DNase_"$NAME
   fi
   echo "Name of data: "$NAME
 }
@@ -454,7 +461,7 @@ function determinePairedFastq () {
   FILE_RAW_BAM=$NAME"_raw.bam"
   FILE_BAM=$NAME".bam"
   
-  if [[ $NAME == *"[Rr]ep"* ]] ; then
+  if [[ $NAME == *"Rep"* ]] ; then
     X=${NAME%_*} #removing the "_Rep"
     FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
   else
@@ -469,6 +476,8 @@ function masterAlign () {
     return 0
   fi
 
+  cd $TEMP_DIR
+  
   STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
 
   BISMARK_ARGUMENTS="--chunkmbs $BISMARK_MEM --multicore $BOWTIE_THREAD --genome $BISMARK_GENOME_DIR "
@@ -476,95 +485,93 @@ function masterAlign () {
 
   for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*$SEARCH_KEY*fastq.gz; do
     determinePairedFastq
-    alignSTAR
-    alignBismark
-    alignBWA
+
+    if [[ $FILE == *"RNA"* ]]; then
+      alignSTAR
+    elif [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"PBAT"* ]]; then
+      alignBismark
+    else
+      if $ALLELE_SPECIFIC || $USE_BOWTIE; then
+        alignBowtie2
+      else
+        alignBWA
+      fi
+    fi
+    
     readyBam
   done
+
+  cd $CURRENT_DIRECTORY
 }
 
 ### Alignment of RNASeq data using STAR
 function alignSTAR () {
-  if [[ $FILE == *"RNA"* ]]; then
-    cd $TEMP_DIR
-    FILE_STAR_OUTPUT=$NAME"Aligned.out.bam"
+  FILE_STAR_OUTPUT=$NAME"Aligned.out.bam"
 
-    if $PAIRED_END; then
-      echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
-      $STAR $STAR_ARGUMENTS --readFilesIn $FILE_FASTQ1 $FILE_FASTQ2 --outFileNamePrefix $NAME
+  if $PAIRED_END; then
+    echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
+    $STAR $STAR_ARGUMENTS --readFilesIn $FILE_FASTQ1 $FILE_FASTQ2 --outFileNamePrefix $NAME
 
-    else #Single-End
-      echo "Aligning $NAME.fastq.gz to genome..."
-      $STAR $STAR_ARGUMENTS --readFilesIn $FILE_FASTQ --outFileNamePrefix $NAME
-    fi
-
-    mv $FILE_STAR_OUTPUT $FILE_RAW_BAM
-    rm -r $SEARCH_KEY*"STAR"*
-    cd $CURRENT_DIRECTORY
+  else #Single-End
+    echo "Aligning $NAME.fastq.gz to genome..."
+    $STAR $STAR_ARGUMENTS --readFilesIn $FILE_FASTQ --outFileNamePrefix $NAME
   fi
+
+  mv $FILE_STAR_OUTPUT $FILE_RAW_BAM
+  rm -r $SEARCH_KEY*"STAR"*
 }
 
 ### Alignment of BSSeq data using Bismark
 function alignBismark () {
-  if [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"PBAT"* ]] ; then
-    cd $TEMP_DIR
-    BISMARK_OUTPUT=$NAME"_bismark_bt2.bam"
+  BISMARK_OUTPUT=$NAME"_bismark_bt2.bam"
 
-    if [[ $NAME == *"PBAT"* ]] ; then
-      BISMARK_ARGUMENTS=$BISMARK_ARGUMENTS"--pbat "
-    else
-      BISMARK_ARGUMENTS=$BISMARK_ARGUMENTS"--non_directional "
-    fi
-
-    if $PAIRED_END; then
-      echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
-      $BISMARK $BISMARK_ARGUMENTS -1 $FILE_FASTQ1 -2 $FILE_FASTQ2
-      BISMARK_OUTPUT=${BISMARK_OUTPUT//_bismark_bt2.bam/_1_bismark_bt2_pe.bam}
-
-    else #Single-End
-      echo "Aligning $NAME.fastq.gz to genome..."
-      $BISMARK $BISMARK_ARGUMENTS $FILE_FASTQ
-    fi
-   
-    mv $BISMARK_OUTPUT $FILE_RAW_BAM
-    cleanBismark
-    rm *report.txt
-    cd $CURRENT_DIRECTORY
+  if [[ $NAME == *"PBAT"* ]] ; then
+    BISMARK_ARGUMENTS=$BISMARK_ARGUMENTS"--pbat "
+  else
+    BISMARK_ARGUMENTS=$BISMARK_ARGUMENTS"--non_directional "
   fi
+
+  if $PAIRED_END; then
+    echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
+    $BISMARK $BISMARK_ARGUMENTS -1 $FILE_FASTQ1 -2 $FILE_FASTQ2
+    BISMARK_OUTPUT=${BISMARK_OUTPUT//_bismark_bt2.bam/_1_bismark_bt2_pe.bam}
+
+  else #Single-End
+    echo "Aligning $NAME.fastq.gz to genome..."
+    $BISMARK $BISMARK_ARGUMENTS $FILE_FASTQ
+  fi
+   
+  mv $BISMARK_OUTPUT $FILE_RAW_BAM
+  cleanBismark
+  rm *report.txt
 }
 
 ### Alignment of ChIP data with BWA
 function alignBWA () {
-  if [[ $FILE == *"ChIP"* ]]; then
-    cd $TEMP_DIR
-    FILE_SAM=$NAME".sam"
+  FILE_SAM=$NAME".sam"
      
-    if $PAIRED_END; then
-      echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
-      $BWA mem -t $RUN_THREAD $GENOME_FILE $FILE_FASTQ1 $FILE_FASTQ2 > $FILE_SAM
-    
-    else #Single-End
-      echo "Aligning "$NAME" to genome..."
-      $BWA mem -t $RUN_THREAD $GENOME_FILE $FILE_FASTQ > $FILE_SAM
-    fi
-
-    echo "Converting to .bam file..."
-    $SAMTOOLS view -bhS -@ $RUN_THREAD $FILE_SAM > $FILE_RAW_BAM
-    rm $FILE_SAM
-    cd $CURRENT_DIRECTORY
+  if $PAIRED_END; then
+    echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
+    $BWA mem -t $RUN_THREAD $GENOME_FILE $FILE_FASTQ1 $FILE_FASTQ2 > $FILE_SAM
+  
+  else #Single-End
+    echo "Aligning "$NAME" to genome..."
+    $BWA mem -t $RUN_THREAD $GENOME_FILE $FILE_FASTQ > $FILE_SAM
   fi
+
+  echo "Converting to .bam file..."
+  $SAMTOOLS view -bhS -@ $RUN_THREAD $FILE_SAM > $FILE_RAW_BAM
+  rm $FILE_SAM
   
 }
 ### Alignment of ChIPSeq data using BT2 (for allelic specific)
 ### TODO
 function alignBowtie2 () {
-  cd $TEMP_DIR
   $BOWTIE2 -x $GENOME_DIR -p $RUN_THREAD -l $FILE_FASTQ1 $FILE_FASTQ2 --local -S $FILE"_raw.sam"
 }
 
 ### Sort and mark duplicates in BAM file after alignment
 function readyBam () {
-  cd $TEMP_DIR
   FILE_SORTED_BAM=$NAME"_sort.bam"
 
   echo "Sorting bam..." #sort BAM by coordinates
@@ -578,7 +585,7 @@ function readyBam () {
   mkdir -p $CURRENT_DIRECTORY/$FOLDER_NAME/"RAW_BAM"
   mv $FILE_RAW_BAM $CURRENT_DIRECTORY/$FOLDER_NAME/"RAW_BAM"/
   mv $FILE_BAM $CURRENT_DIRECTORY/$FOLDER_NAME/
-  cd $CURRENT_DIRECTORY
+
 }
 
 ### Searches for .bam files containing _Rep#.bam in nested directories and combines them into a single bam
@@ -586,14 +593,14 @@ function collapseReplicates () {
   cd $TEMP_DIR
 	CURRENT=""
 	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
-		if [[ $FILE == *"_[Rr]ep"* ]] ; then 
-		  MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam}
-			if [[ $CURRENT != ${FILE//_[Rr]ep*.bam/}*.bam ]] ; then #
+		if [[ $FILE == *"_Rep"* ]] ; then 
+		  MERGED_BAM=${FILE//_Rep*.bam/.bam}
+			if [[ $CURRENT != ${FILE//_Rep*.bam/}*.bam ]] ; then #
 				CURRENT=$FILE
-				echo "Merging ${FILE//_[Rr]ep*.bam}*.bam"
-				$SAMTOOLS merge -@ $RUN_THREAD $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
+				echo "Merging ${FILE//_Rep*.bam}*.bam"
+				$SAMTOOLS merge -@ $RUN_THREAD $MERGED_BAM ${FILE//_Rep*.bam/}*.bam
         if [[ $KEEP_REPLICATES == false ]]; then
-				  rm ${FILE//_[Rr]ep*.bam/}_*ep*.bam #removing only the replicates
+				  rm ${FILE//_Rep*.bam/}_*ep*.bam #removing only the replicates
         fi
         echo "Indexing BAM file..."
         $SAMTOOLS index ${MERGED_BAM//.bam/}* #index merged & replicates (if available)
@@ -826,7 +833,7 @@ function masterTrackHub () {
 
   PRINTED_DIR=""
   
-  for FILE_1 in ./*/*${SEARCH_KEY//_[Rr]ep*/}*.bam; do
+  for FILE_1 in ./*/*${SEARCH_KEY//_Rep*/}*.bam; do
     FILE_2=${FILE_1//.\//} #getting rid of the "./"
     FILE=$(basename $FILE_1) #leaving just the basename of the file
     FILE_NAME=${FILE//.bam/_}$NORMALIZE ##basename without file extension
@@ -861,7 +868,7 @@ function masterTrackHub () {
 }
 
 function determineInfoBAM () {
-  if [[ $FILE == *"RNAseq"* ]] ; then
+  if [[ $FILE == *"RNA"* ]] ; then
 		TYPE="RNAseq"
 	elif [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"PBAT"* ]] ; then
 		TYPE="Bisulfite-Seq"
