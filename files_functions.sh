@@ -39,7 +39,7 @@ function bam2rpkm () {
     FILE=$(basename $BAM)
     SAMPLE=${FILE%%.*}"_RPKM"
     echo Sample is $SAMPLE
-    TOTAL_READS=$(SAMTOOLS idxstats $BAM | awk -F '\t' '{s+=$3}END{print s}')
+    TOTAL_READS=$($SAMTOOLS idxstats $BAM | awk -F '\t' '{s+=$3}END{print s}')
     echo The number of reads is $TOTAL_READS
 
     $BEDTOOLS multicov -bams $BAM -bed $BED \
