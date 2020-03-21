@@ -8,7 +8,7 @@
 #Ensure function and config files are within same directory (sourcing will not work otherwise)
 source $FUNCTIONS_DIR/BRC.config
 
-shopt -s nocasematch #turning off case matching 
+shopt -s nocaseglob #turning off case match for files 
 
 ## Non System Specific Variables
 CURRENT_DIRECTORY=$(pwd)
@@ -75,7 +75,6 @@ HELP_FULL="\n$HELP\n
 ############### FUNCTIONS ###############
 ### Changing options/variables based on options passed from shell script
 function parseOptions () {
-  shopt -u nocasematch #turn on case matching for options
   if ( ! getopts $OPTIONS opt); then
     echo -e $HELP
     exit 1
@@ -179,12 +178,11 @@ function parseOptions () {
       \?)
         echo -e "\n###############\nERROR: Invalid Option! \nTry '$(basename $0) -h' for help.\n###############" >&2
         exit 1
-        ;;
+        ;;q
     esac
   done
   setGenome $GENOME_BUILD  
   checkDependencies
-  shopt -s nocasematch
 }
 
 ### Create subset of SRACODE array to be used in parallel running
@@ -198,19 +196,19 @@ function parallelRun () {
     for code in $CODE_ARRAY; do
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
-      if [[ $NAME == *Rep* ]] ; then
-        if [[ $CURRENT_SET != ${NAME//Rep*/Rep*} ]]; then
-          CURRENT_SET=${NAME//Rep*/Rep*}
-          declare -a SUB_ARRAY=$(grep -e ${NAME//Rep*/Rep*} $INPUT_FILE | cut -f1)
-          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//Rep*/Rep}
+      if [[ $NAME == *"_Rep"* ]] ; then
+        if [[ $CURRENT_SET != ${NAME//_Rep*/_Rep*} ]]; then
+          CURRENT_SET=${NAME//_Rep*/_Rep*}
+          declare -a SUB_ARRAY=$(grep -e ${NAME//_Rep*/_Rep*} $INPUT_FILE | cut -f1)
+          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//_Rep*/_Rep}
           
           if $USE_SERVER; then
             echo "Submitting on server"
-            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//Rep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
+            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//_Rep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/_Rep} -X $SUB_ARRAY
           else
-            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//Rep*/Rep} -X $SUB_ARRAY
+            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/_Rep} -X $SUB_ARRAY
           fi
-
+q
         fi
 
       else
@@ -466,7 +464,7 @@ function determinePairedFastq () {
   FILE_RAW_BAM=$NAME"_raw.bam"
   FILE_BAM=$NAME".bam"
   
-  if [[ $NAME == *Rep* ]] ; then
+  if [[ $NAME == *"Rep"* ]] ; then
     X=${NAME%_*} #removing the "_Rep"
     FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
   else
