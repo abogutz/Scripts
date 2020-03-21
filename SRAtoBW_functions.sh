@@ -51,7 +51,7 @@ HELP_FULL="\n$HELP\n
 -a\tAllele-specific alignment using MEA.\n\t
 -b\tBAM Inputs. Will use any already aligned .bam files in\n\t\tsubdirectories to generate trackhub.\n\t
 -B\tBAM Input with realignment. Will extract reads from .bam files\n\t\tin listed directory and realign to genome of choice.\n\t
--d\tTemporary directory. Useful for solid-state drives etc.\n\tPlease change the default using BRC.config.\n\t
+-d\tTemporary directory. Useful for solid-state drives etc.\n\t\tPlease change the default using BRC.config.\n\t
 -D\tCheck Dependencies and exit.\n\t
 -f\tInput .fastq files. Provide folder name in which fastq files\n\t\tare located (files must end in .fastq.gz).\n\t
 -F\tOnly output .fastq files.\n\t
@@ -178,7 +178,7 @@ function parseOptions () {
       \?)
         echo -e "\n###############\nERROR: Invalid Option! \nTry '$(basename $0) -h' for help.\n###############" >&2
         exit 1
-        ;;q
+        ;;
     esac
   done
   setGenome $GENOME_BUILD  
@@ -197,18 +197,20 @@ function parallelRun () {
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
       if [[ $NAME == *"_Rep"* ]] ; then
-        if [[ $CURRENT_SET != ${NAME//_Rep*/_Rep*} ]]; then
-          CURRENT_SET=${NAME//_Rep*/_Rep*}
-          declare -a SUB_ARRAY=$(grep -e ${NAME//_Rep*/_Rep*} $INPUT_FILE | cut -f1)
+        if [[ $CURRENT_SET != ${NAME//_Rep*/_Rep}* ]]; then
+          CURRENT_SET=${NAME//_Rep*/_Rep}*
+          declare -a SUB_ARRAY=$(grep -e ${NAME//_Rep*/_Rep}* $INPUT_FILE | cut -f1)
           echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//_Rep*/_Rep}
           
           if $USE_SERVER; then
             echo "Submitting on server"
             $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//_Rep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/_Rep} -X $SUB_ARRAY
+            sleep 30 #pause for 30 secs before running next code b/c fetching data takes some time
           else
-            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/_Rep} -X $SUB_ARRAY
+            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/_Rep} -X $SUB_ARRAY & 
+            wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
           fi
-q
+
         fi
 
       else
@@ -218,8 +220,10 @@ q
         if $USE_SERVER ; then
           echo "Submitting on server"
           $SERVER_SUBMIT "MasterDAT_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+          sleep 30
         else
           $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+          wait $!
         fi
 
       fi
