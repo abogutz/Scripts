@@ -198,7 +198,7 @@ function parallelRun () {
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-      if [[ $NAME == *"_Rep"* ]] ; then
+      if [[ $NAME == *_Rep* ]] ; then
         CASE_REP=${NAME##*_} ##only want the part that say "[Rr]ep" for renaming
         CASE_REP="_"${CASE_REP//ep*/ep} #changing [Rr]ep# to _[Rr]ep
         
@@ -473,7 +473,7 @@ function determinePairedFastq () {
   FILE_RAW_BAM=$NAME"_raw.bam"
   FILE_BAM=$NAME".bam"
   
-  if [[ $NAME == *"Rep"* ]] ; then
+  if [[ $NAME == *Rep* ]] ; then
     X=${NAME%_*} #removing the "_Rep"
     FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
   else
@@ -605,7 +605,7 @@ function collapseReplicates () {
   cd $TEMP_DIR
 	CURRENT=""
 	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
-		if [[ $FILE == *"_Rep"* ]] ; then 
+		if [[ $FILE == *_Rep* ]] ; then 
 		  MERGED_BAM=${FILE//_Rep*.bam/.bam}
 			if [[ $CURRENT != ${FILE//_Rep*.bam/}*.bam ]] ; then #
 				CURRENT=$FILE
