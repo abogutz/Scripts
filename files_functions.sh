@@ -1,6 +1,5 @@
 #! /bin/bash
-
-source $FUNCTIONS_DIR/BRC.config
+#source $FUNCTIONS_DIR/BRC.config
 
 CURRENT_DIRECTORY=$(pwd)
 
@@ -49,5 +48,15 @@ function bam2rpkm () {
     mv $TEMP_FILE $OUTFILE
     echo $SAMPLE "done for" $OUTFILE
   done  
+}
+
+
+### split BED file into 2 files based on strandedness (+ or -)
+function splitStrands () {
+  BED=$1
+  COLUMN=$2
+
+  awk 'BEGIN {OFS="\t"} {if ($'$COLUMN' == "+") {print $0}}' $BED > "pos_"$BED
+  awk 'BEGIN {OFS="\t"} {if ($'$COLUMN' == "-") {print $0}}' $BED > "neg_"$BED
 }
 
