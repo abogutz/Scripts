@@ -249,9 +249,11 @@ function masterDownload () {
     obtainFastqFromBAM
     return 0 #after extracting fastq from BAM, can exit masterDownload function
   fi
- 
+
+  INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
+  
   if [[ -z $CODE_ARRAY ]]; then #this will basically only be used if the function was called by itself (may delete later)
-    INPUT_FILE=$CURRENT_DIRECTORY/$1
+    INPUT_FILE=$CURRENT_DIRECTORY/$F1
     createCodeArray
   fi
   
@@ -616,7 +618,7 @@ function collapseReplicates () {
         echo "Indexing BAM file..."
         $SAMTOOLS index ${MERGED_BAM//.bam/}* #index merged & replicates (if available)
 			fi
-    elseec
+    else
       echo "Indexing BAM file..."
       $SAMTOOLS index $FILE
 		fi
