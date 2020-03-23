@@ -183,7 +183,6 @@ function parseOptions () {
   done
   setGenome $GENOME_BUILD  
   checkDependencies
-  shopt -s nocasematch #turn off case matching
 }
 
 ### Create subset of SRACODE array to be used in parallel running
@@ -198,21 +197,21 @@ function parallelRun () {
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-      if [[ $NAME == *_Rep* ]] ; then
+      if [[ $NAME == *_[Rr]ep* ]] ; then
         CASE_REP=${NAME##*_} ##only want the part that say "[Rr]ep" for renaming
         CASE_REP="_"${CASE_REP//ep*/ep} #changing [Rr]ep# to _[Rr]ep
         
-        if [[ $CURRENT_SET != ${NAME//_Rep*/$CASE_REP}* ]]; then
-          CURRENT_SET=${NAME//_Rep*/$CASE_REP}*
-          declare -a SUB_ARRAY=$(grep -e ${NAME//_Rep*/$CASE_REP}* $INPUT_FILE | cut -f1)
-          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//_Rep*/$CASE_REP}
+        if [[ $CURRENT_SET != ${NAME//_[Rr]ep*/$CASE_REP}* ]]; then
+          CURRENT_SET=${NAME//_[Rr]ep*/$CASE_REP}*
+          declare -a SUB_ARRAY=$(grep -e ${NAME//_[Rr]ep*/$CASE_REP}* $INPUT_FILE | cut -f1)
+          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//_[Rr]ep*/$CASE_REP}
           
           if $USE_SERVER; then
             echo "Submitting on server"
-            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//_Rep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/$CASE_REP} -X $SUB_ARRAY
+            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//_[Rr]ep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY
             sleep 30 #pause for 30 secs before running next code b/c fetching data takes some time
           else
-            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/$CASE_REP} -X $SUB_ARRAY & 
+            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY & 
             wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
           fi
 
@@ -605,14 +604,14 @@ function collapseReplicates () {
   cd $TEMP_DIR
 	CURRENT=""
 	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
-		if [[ $FILE == *_Rep* ]] ; then 
-		  MERGED_BAM=${FILE//_Rep*.bam/.bam}
-			if [[ $CURRENT != ${FILE//_Rep*.bam/}*.bam ]] ; then #
+		if [[ $FILE == *_[Rr]ep* ]] ; then 
+		  MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam}
+			if [[ $CURRENT != ${FILE//_[Rr]ep*.bam/}*.bam ]] ; then #
 				CURRENT=$FILE
-				echo "Merging ${FILE//_Rep*.bam}*.bam"
-				$SAMTOOLS merge -@ $RUN_THREAD $MERGED_BAM ${FILE//_Rep*.bam/}*.bam
+				echo "Merging ${FILE//_[Rr]ep*.bam}*.bam"
+				$SAMTOOLS merge -@ $RUN_THREAD $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
         if [[ $KEEP_REPLICATES == false ]]; then
-				  rm ${FILE//_Rep*.bam/}_*ep*.bam #removing only the replicates
+				  rm ${FILE//_[Rr]ep*.bam/}_*ep*.bam #removing only the replicates
         fi
         echo "Indexing BAM file..."
         $SAMTOOLS index ${MERGED_BAM//.bam/}* #index merged & replicates (if available)
@@ -845,7 +844,7 @@ function masterTrackHub () {
 
   PRINTED_DIR=""
   
-  for FILE_1 in ./*/*${SEARCH_KEY//_Rep*/}*.bam; do
+  for FILE_1 in ./*/*${SEARCH_KEY//_[Rr]ep*/}*.bam; do
     FILE_2=${FILE_1//.\//} #getting rid of the "./"
     FILE=$(basename $FILE_1) #leaving just the basename of the file
     FILE_NAME=${FILE//.bam/_}$NORMALIZE ##basename without file extension
