@@ -183,6 +183,7 @@ function parseOptions () {
   done
   setGenome $GENOME_BUILD  
   checkDependencies
+  shopt -s nocasematch #turn off case matching
 }
 
 ### Create subset of SRACODE array to be used in parallel running
@@ -196,18 +197,22 @@ function parallelRun () {
     for code in $CODE_ARRAY; do
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
+
       if [[ $NAME == *"_Rep"* ]] ; then
-        if [[ $CURRENT_SET != ${NAME//_Rep*/_Rep}* ]]; then
-          CURRENT_SET=${NAME//_Rep*/_Rep}*
-          declare -a SUB_ARRAY=$(grep -e ${NAME//_Rep*/_Rep}* $INPUT_FILE | cut -f1)
-          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//_Rep*/_Rep}
+        CASE_REP=${NAME##*_} ##only want the part that say "[Rr]ep" for renaming
+        CASE_REP="_"${CASE_REP//ep*/ep} #changing [Rr]ep# to _[Rr]ep
+        
+        if [[ $CURRENT_SET != ${NAME//_Rep*/$CASE_REP}* ]]; then
+          CURRENT_SET=${NAME//_Rep*/$CASE_REP}*
+          declare -a SUB_ARRAY=$(grep -e ${NAME//_Rep*/$CASE_REP}* $INPUT_FILE | cut -f1)
+          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//_Rep*/$CASE_REP}
           
           if $USE_SERVER; then
             echo "Submitting on server"
-            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//_Rep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/_Rep} -X $SUB_ARRAY
+            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//_Rep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/$CASE_REP} -X $SUB_ARRAY
             sleep 30 #pause for 30 secs before running next code b/c fetching data takes some time
           else
-            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/_Rep} -X $SUB_ARRAY & 
+            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_Rep*/$CASE_REP} -X $SUB_ARRAY & 
             wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
           fi
 
@@ -288,7 +293,7 @@ function downloadReads () {
               | $EFETCH --format runinfo \
               | cut -d ',' -f 10 \
               | grep https); do			
-    wget $DL -O $SEARCH_KEY"_"$(basename $DL) & #& this allow the command to run in parallel and in the background 
+    wget --no-check-certificate $DL -O $SEARCH_KEY"_"$(basename $DL) & #& this allow the command to run in parallel and in the background 
     DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
     ((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
   done
@@ -365,7 +370,7 @@ function extractFastq () {
 		$FASTERQDUMP -e $RUN_THREAD --split-files ./$SRA_FILE
 	done
 
-  echo "Compressing fastq files..." ##simultaneously zip all the dump fastq files for that read
+  echo "Compressing fastq files..." #simultaneously zip all the dump fastq files for that read
   for DL_FASTQ in $SEARCH_DL*fastq; do 
     gzip $DL_FASTQ & 
     COMPRESS_PID_ARRAY[$COMPRESS_COUNTER]=$!
@@ -403,7 +408,7 @@ function extractFastq () {
 ### Trim fastq files for adaptors using trimmomatic
 ### Could be called with $1=directory that holds fastq files
 function trimReads () {
-  if $TRIM_READ || [[ $1 != "" ]]; then ##if a directory is fed into this function, then function will run on the directory
+  if $TRIM_READ || [[ $1 != "" ]]; then #if a directory is fed into this function, then function will run on the directory
     cd $TEMP_DIR
 
     for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
@@ -450,8 +455,8 @@ function determinePairedFastq () {
     continue #dont process 2nd read, continue to next iteration
   fi
   if [[ $FILE == *"_1.fastq.gz" ]] ; then
-    FASTQ_PATH=${FILE//_1.fastq.gz/} ##removes everything that's after // - leaving path to directory
-    NAME=${FASTQ_PATH##*/} ##removes all prefixes prior to the last / - removing path to directory
+    FASTQ_PATH=${FILE//_1.fastq.gz/} #removes everything that's after // - leaving path to directory
+    NAME=${FASTQ_PATH##*/} #removes all prefixes prior to the last / - removing path to directory
     
     PAIRED_END=true
     FILE_FASTQ1=$FASTQ_PATH"_1.fastq.gz"
