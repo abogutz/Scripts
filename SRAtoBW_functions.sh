@@ -3,6 +3,9 @@
 ###List of functions that can be used in various pipelines for download, align and creating track hub
 
 ##System Specific Configuration
+if [[ -z $FUNCTIONS_DIR ]]; then #if functions file is called by itself to run individual functions
+  FUNCTIONS_DIR=$(dirname $0)
+fi
 
 #TODO: alter any system specific variables and tools path through config file
 #Ensure function and config files are within same directory (sourcing will not work otherwise)
