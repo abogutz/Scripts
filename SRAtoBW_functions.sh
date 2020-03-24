@@ -474,7 +474,7 @@ function determinePairedFastq () {
   FILE_RAW_BAM=$NAME"_raw.bam"
   FILE_BAM=$NAME".bam"
   
-  if [[ $NAME == *Rep* ]] ; then
+  if [[ $NAME == *_[Rr]ep* ]] ; then
     X=${NAME%_*} #removing the "_Rep"
     FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
   else
