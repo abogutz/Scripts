@@ -1,6 +1,6 @@
-  #! /bin/bash
+#! /bin/bash
 #$ -cwd
-#$ -pe ncpus 4
+#$ -pe ncpus 3
 #$ -l h_vmem=12G
 #$ -m e
 #$ -M tiffyyleung@gmail.com
