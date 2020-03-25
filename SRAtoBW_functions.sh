@@ -3,15 +3,10 @@
 ###List of functions that can be used in various pipelines for download, align and creating track hub
 
 ##System Specific Configuration
-if [[ -z $FUNCTIONS_DIR ]]; then #if functions file is called by itself to run individual functions
-  FUNCTIONS_DIR=$(dirname $0)
-fi
 
 #TODO: alter any system specific variables and tools path through config file
 #Ensure function and config files are within same directory (sourcing will not work otherwise)
 source $FUNCTIONS_DIR/BRC.config
-
-shopt -s nocaseglob #turning off case match for files 
 
 ## Non System Specific Variables
 CURRENT_DIRECTORY=$(pwd)
@@ -211,7 +206,8 @@ function parallelRun () {
           
           if $USE_SERVER; then
             echo "Submitting on server"
-            $SERVER_SUBMIT "MasterDAT_"${CURRENT_SET//_[Rr]ep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY
+            DATE=$(date '+%y-%m-%d')
+            $SERVER_SUBMIT $DATE"_MasterDAT_"${CURRENT_SET//_[Rr]ep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY
             sleep 30 #pause for 30 secs before running next code b/c fetching data takes some time
           else
             $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY & 
@@ -226,7 +222,8 @@ function parallelRun () {
 
         if $USE_SERVER ; then
           echo "Submitting on server"
-          $SERVER_SUBMIT "MasterDAT_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+          DATE=$(date '+%y-%m-%d')
+          $SERVER_SUBMIT $DATE"_MasterDAT_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
           sleep 30
         else
           $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
@@ -335,6 +332,10 @@ function extractType() {
        [[ $NAME != *"BSSeq"* ]] && \
        [[ $NAME != *"PBAT"* ]] ; then
        NAME="BSSeq_"$NAME
+
+  elif [[ $TYPE == "ATAC-seq" ]] && \
+       [[ $NAME != *"ATAC"* ]]; then
+       NAME="ATACSeq_"$NAME
 
   elif [[ $TYPE == "DNase-Hypersensitivity" ]] && \
        [[ $NAME != *"DNase"* ]]; then
