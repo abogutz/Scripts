@@ -6,6 +6,13 @@
 
 #TODO: alter any system specific variables and tools path through config file
 #Ensure function and config files are within same directory (sourcing will not work otherwise)
+
+if [[ -z $FUNCTIONS_DIR]]; then #if want to use functions by themselves
+  pushd $(dirname $0) > /dev/null
+  FUNCTIONS_DIR=$(pwd -P)
+  popd > /dev/null
+fi
+
 source $FUNCTIONS_DIR/BRC.config
 
 ## Non System Specific Variables
@@ -32,7 +39,7 @@ SMOOTH=0
 NORMALIZE="CPM"
 MIN_MAPPING_QUAL=5
 
-DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK $BWA $SAMTOOLS "$JAVA $MARKDUPS" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
+DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK_DIR/bismark $BWA $SAMTOOLS "$JAVA $MARKDUPS" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
 OPTIONS="hi:ab:B:d:Df:Fg:km:M:n:N:ors:St:Tux:X"
@@ -207,7 +214,7 @@ function parallelRun () {
           if $USE_SERVER; then
             echo "Submitting on server"
             DATE=$(date '+%y-%m-%d')
-            $SERVER_SUBMIT $DATE"_MasterDAT_"${CURRENT_SET//_[Rr]ep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY
+            $SERVER_SUBMIT "MasterDAT_"$DATE"_"${CURRENT_SET//_[Rr]ep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY
             sleep 30 #pause for 30 secs before running next code b/c fetching data takes some time
           else
             $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY & 
@@ -223,7 +230,7 @@ function parallelRun () {
         if $USE_SERVER ; then
           echo "Submitting on server"
           DATE=$(date '+%y-%m-%d')
-          $SERVER_SUBMIT $DATE"_MasterDAT_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+          $SERVER_SUBMIT "MasterDAT_"$DATE"_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
           sleep 30
         else
           $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
@@ -550,12 +557,12 @@ function alignBismark () {
 
   if $PAIRED_END; then
     echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
-    $BISMARK $BISMARK_ARGUMENTS -1 $FILE_FASTQ1 -2 $FILE_FASTQ2
+    $BISMARK_DIR/bismark $BISMARK_ARGUMENTS -1 $FILE_FASTQ1 -2 $FILE_FASTQ2
     BISMARK_OUTPUT=${BISMARK_OUTPUT//_bismark_bt2.bam/_1_bismark_bt2_pe.bam}
 
   else #Single-End
     echo "Aligning $NAME.fastq.gz to genome..."
-    $BISMARK $BISMARK_ARGUMENTS $FILE_FASTQ
+    $BISMARK_DIR/bismark $BISMARK_ARGUMENTS $FILE_FASTQ
   fi
    
   mv $BISMARK_OUTPUT $FILE_RAW_BAM
@@ -581,10 +588,24 @@ function alignBWA () {
   rm $FILE_SAM
   
 }
+
 ### Alignment of ChIPSeq data using BT2 (for allelic specific)
-### TODO
 function alignBowtie2 () {
-  $BOWTIE2 -x $GENOME_DIR -p $RUN_THREAD -l $FILE_FASTQ1 $FILE_FASTQ2 --local -S $FILE"_raw.sam"
+  FILE_SAM=$NAME".sam"
+
+  if $PAIRED_END; then
+    echo "Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
+    $BOWTIE2_DIR/bowtie2 -x $GENOME_DIR -p $RUN_THREAD -1 $FILE_FASTQ1 -2 $FILE_FASTQ2 --local -S $FILE_SAM
+
+  else #Single-End
+    echo "Aligning "$NAME" to genome..."
+    $BOWTIE2_DIR/bowtie2 -x $GENOME_DIR -p $RUN_THREAD -U $FILE_FASTQ --local -S $FILE_SAM
+  fi
+
+  echo "Converting to .bam file..."
+  $SAMTOOLS view -bhS -@ $RUN_THREAD $FILE_SAM > $FILE_RAW_BAM
+  rm $FILE_SAM
+
 }
 
 ### Sort and mark duplicates in BAM file after alignment
@@ -681,8 +702,8 @@ function setGenome () {
 		printf "hub <name>\nshortLabel <short name>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email>" > ./Track_Hub/hub.txt
 	fi
   
-  MOUSE="Mmu"
-  RAT="Rno"
+  MOUSE="." #TODO
+  RAT="."   
 
   case $1 in
 		"mm9") 
@@ -701,7 +722,7 @@ function setGenome () {
 			fi
 			;;
 		"mm10")
-		  GENOME_DIR=$GENOME_DIR/$1/ #currently BRC version
+		  GENOME_DIR=$GENOME_DIR/$MOUSE/$1/ #currently BRC version
 			CHROM_SIZES=$GENOME_DIR/"mm10.sizes"
 			GENOME_FILE=$GENOME_DIR/"mm10.fa"
 			STAR_GENOME_DIR=$GENOME_DIR/"mm10-STAR"
@@ -966,7 +987,7 @@ function generateBSTrack () {
   #		FILE_TEMP_2=$TEMP_DIR"/temp2.bam"
 		  echo "Filtering" $FILE "for mapping quality..."
 		  $SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPPING_QUAL -o $FILE_TEMP_1 $FILE_2
-		  $BISMARK_METH_EXTRACT --gzip --multicore $RUN_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
+		  $BISMARK_DIR/bismark_methylation_extractor --gzip --multicore $RUN_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
   #		mv temp2.bedGraph.gz $FILE_BEDGRAPH.gz # TODO probably not correct
 		  gunzip $TEMP_BEDGRAPH.gz
   #		grep ^[^\*] $FILE_BEDGRAPH > $TEMP_DIR/temp.bedgraph
