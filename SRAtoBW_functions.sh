@@ -20,6 +20,7 @@ CURRENT_DIRECTORY=$(pwd)
 FASTQ_DIRECTORY="./Fastq"
 
 ALLELE_SPECIFIC=false
+ALLELE_RUN=false
 BAM_INPUT=false
 BAM_REALIGNMENT=false
 FASTQ_INPUT=false
@@ -37,7 +38,7 @@ GENOME_BUILD="mm10"
 BIN_SIZE=1
 SMOOTH=0
 NORMALIZE="CPM"
-MIN_MAPPING_QUAL=5
+MIN_MAPQ=5
 
 DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK_DIR/bismark $BWA $SAMTOOLS "$JAVA $MARKDUPS" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
@@ -141,7 +142,7 @@ function parseOptions () {
         THREAD_MEM=${OPTARG}
         ;;
       M)
-        MIN_MAPPING_QUAL=${OPTARG}
+        MIN_MAPQ=${OPTARG}
         ;;
       n)
         BIN_SIZE=${OPTARG}
@@ -202,22 +203,19 @@ function parallelRun () {
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-      if [[ $NAME == *_[Rr]ep* ]] ; then
-        CASE_REP=${NAME##*_} ##only want the part that say "[Rr]ep" for renaming
-        CASE_REP="_"${CASE_REP//ep*/ep} #changing [Rr]ep# to _[Rr]ep
-        
-        if [[ $CURRENT_SET != ${NAME//_[Rr]ep*/$CASE_REP}* ]]; then
-          CURRENT_SET=${NAME//_[Rr]ep*/$CASE_REP}*
-          declare -a SUB_ARRAY=$(grep -e ${NAME//_[Rr]ep*/$CASE_REP}* $INPUT_FILE | cut -f1)
-          echo "calling "$(basename $SHELL_SCRIPT) "on" ${CURRENT_SET//_[Rr]ep*/$CASE_REP}
+      if [[ $NAME == *_[Rr]ep* ]] ; then        
+        if [[ $CURRENT_SET != ${NAME//_[Rr]ep*/}* ]]; then
+          CURRENT_SET=${NAME//_[Rr]ep*/}
+          declare -a SUB_ARRAY=$(grep -e $CURRENT_SET $INPUT_FILE | cut -f1)
+          echo "calling "$(basename $SHELL_SCRIPT) "on" $CURRENT_SET
           
           if $USE_SERVER; then
             echo "Submitting on server"
             DATE=$(date '+%y-%m-%d')
-            $SERVER_SUBMIT "MasterDAT_"$DATE"_"${CURRENT_SET//_[Rr]ep*/} $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY
+            $SERVER_SUBMIT "MasterDAT_"$DATE"_"$CURRENT_SET $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY
             sleep 30 #pause for 30 secs before running next code b/c fetching data takes some time
           else
-            $SHELL_SCRIPT $PASS_ARG -x ${CURRENT_SET//_[Rr]ep*/$CASE_REP} -X $SUB_ARRAY & 
+            $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY & 
             wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
           fi
 
@@ -521,8 +519,13 @@ function masterAlign () {
         alignBWA
       fi
     fi
+
+    if $ALLELE_RUN; then #allele specific run will need to do unpacking
+      return 0
+    fi
     
     readyBam
+    
   done
 
   cd $CURRENT_DIRECTORY
@@ -617,12 +620,11 @@ function readyBam () {
     
   echo "Marking duplicates..."
   $JAVA $MARKDUPS I=$FILE_SORTED_BAM O=$FILE_BAM M=temp.txt
-  rm temp.txt
-  rm $FILE_SORTED_BAM
 
-  mkdir -p $CURRENT_DIRECTORY/$FOLDER_NAME/"RAW_BAM"
-  mv $FILE_RAW_BAM $CURRENT_DIRECTORY/$FOLDER_NAME/"RAW_BAM"/
   mv $FILE_BAM $CURRENT_DIRECTORY/$FOLDER_NAME/
+
+  rm temp.txt
+  rm $FILE_SORTED_BAM $FILE_RAW_BAM
 
 }
 
@@ -867,11 +869,11 @@ function fixMates () {
 
 ############### TRACK-HUB FUNCTIONS ###############
 function masterTrackHub () {
-  BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH --outFileFormat bigwig --minMappingQuality $MIN_MAPPING_QUAL --ignoreDuplicates "
+  BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates "
 
   PRINTED_DIR=""
   
-  for FILE_1 in ./*/*${SEARCH_KEY//_[Rr]ep*/}*.bam; do
+  for FILE_1 in ./*/*$SEARCH_KEY*.bam; do
     FILE_2=${FILE_1//.\//} #getting rid of the "./"
     FILE=$(basename $FILE_1) #leaving just the basename of the file
     FILE_NAME=${FILE//.bam/_}$NORMALIZE ##basename without file extension
@@ -986,7 +988,7 @@ function generateBSTrack () {
 		  TEMP_BEDGRAPH=${FILE_TEMP_1//.bam/.bedGraph}
   #		FILE_TEMP_2=$TEMP_DIR"/temp2.bam"
 		  echo "Filtering" $FILE "for mapping quality..."
-		  $SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPPING_QUAL -o $FILE_TEMP_1 $FILE_2
+		  $SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FILE_2
 		  $BISMARK_DIR/bismark_methylation_extractor --gzip --multicore $RUN_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
   #		mv temp2.bedGraph.gz $FILE_BEDGRAPH.gz # TODO probably not correct
 		  gunzip $TEMP_BEDGRAPH.gz
