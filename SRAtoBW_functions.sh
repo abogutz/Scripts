@@ -18,6 +18,7 @@ source $FUNCTIONS_DIR/BRC.config
 ## Non System Specific Variables
 CURRENT_DIRECTORY=$(pwd)
 FASTQ_DIRECTORY="./Fastq"
+TRACK_HUB_DIR="./Track_Hub"
 
 ALLELE_SPECIFIC=false
 ALLELE_RUN=false
@@ -28,19 +29,20 @@ FASTQ_ONLY=false
 KEEP_FASTQ=false
 KEEP_REPLICATES=false
 SEP_PARA=false
+STRANDED_ALLELIC=false
 TRIM_READ=false
 USE_BOWTIE=false
 USE_SERVER=false
 
 CODE_ARRAY=""
-GENOME_BUILD="mm10"
-
 BIN_SIZE=1
-SMOOTH=0
-NORMALIZE="CPM"
+FLAG=1540 #read unmapped, read fails platform/vendor quality checks, read is PCR or optical duplicate 
+GENOME_BUILD="mm10"
 MIN_MAPQ=5
+NORMALIZE="CPM"
+SMOOTH_WIN=0
 
-DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK_DIR/bismark $BWA $SAMTOOLS "$JAVA $MARKDUPS" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
+DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$JAVA $TRIMMOMATIC" $STAR $BISMARK_DIR/bismark $BWA $SAMTOOLS "$JAVA $PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
 OPTIONS="hi:ab:B:d:Df:Fg:km:M:n:N:ors:St:Tux:X"
@@ -68,17 +70,20 @@ HELP_FULL="\n$HELP\n
 -n\tBin size for bigwig generation. Larger bins to smooth noisy\n\t\tdata. Default=1\n\t
 -N\tNormalization method for bigwigs. Accepted: CPM, RPKM\n\t\t(Default=CPM)\n\t
 -r\tKeep replicates after collapsing. Default=false.\n\t
--s\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t
+-s\tObtained stranded RPM tracks for allele-specific runs. Default=false\n\t
 -S\tUse of server to submit parallel jobs. Default=FALSE\n\t
 -t\tNumber of Threads to use. Default=6 (Check in config file)\n\t
 -T\tTrim .fastq files after download.\n\t
--u\tChanging ChIPseq aligner to bowtie2. Default=BWA\n\t"
+-u\tChanging ChIPseq aligner to bowtie2. Default=BWA\n\t
+-w\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t"
 
 
 
 
+########################################
+#               FUNCTIONS              #
+########################################
 
-############### FUNCTIONS ###############
 ### Changing options/variables based on options passed from shell script
 function parseOptions () {
   if ( ! getopts $OPTIONS opt); then
@@ -158,7 +163,7 @@ function parseOptions () {
         KEEP_REPLICATES=true
         ;;
       s)
-        SMOOTH=${OPTARG}
+        STRANDED_ALLELIC=true
         ;;
       S)
         USE_SERVER=true
@@ -171,6 +176,9 @@ function parseOptions () {
         ;;
       u)
         USE_BOWTIE=true
+        ;;
+      w)
+        SMOOTH_WIN=${OPTARG}
         ;;
       x)
         SEP_PARA=false
@@ -502,12 +510,15 @@ function determinePairedFastq () {
   FILE_RAW_BAM=$NAME"_raw.bam"
   FILE_BAM=$NAME".bam"
   
-  if [[ $NAME == *_[Rr]ep* ]] ; then
+  if [[ $NAME == *_[Rr]ep* ]] ; then #creating name of folder that will be storing the BAMs
     X=${NAME%_*} #removing the "_Rep"
-    FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
+    BAM_FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
   else
-    FOLDER_NAME=${NAME##*_}
+    BAM_FOLDER_NAME=${NAME##*_}
   fi
+
+  BAM_FOLDER=$CURRENT_DIRECTORY/$BAM_FOLDER_NAME
+  mkdir -p $BAM_FOLDER
 }
 
 ### Align fastq files to using data-specific aligner
@@ -623,11 +634,11 @@ function alignBowtie2 () {
 
   if $PAIRED_END; then
     printProgress "[masterAlign Bowtie2] Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
-    $BOWTIE2_DIR/bowtie2 -x $GENOME_DIR -p $RUN_THREAD -1 $FILE_FASTQ1 -2 $FILE_FASTQ2 -S $FILE_SAM
+    $BOWTIE2_DIR/bowtie2 -x $GENOME_BUILD -p $RUN_THREAD -1 $FILE_FASTQ1 -2 $FILE_FASTQ2 -S $FILE_SAM
 
   else #Single-End
     printProgress "[masterAlign Bowtie2] Aligning $NAME.fastq to genome..."
-    $BOWTIE2_DIR/bowtie2 -x $GENOME_DIR -p $RUN_THREAD -U $FILE_FASTQ -S $FILE_SAM
+    $BOWTIE2_DIR/bowtie2 -x $GENOME_BUILD -p $RUN_THREAD -U $FILE_FASTQ -S $FILE_SAM
   fi
 
   printProgress "[masterAlign Bowtie2] Converting sam file to .bam file..."
@@ -644,16 +655,16 @@ function refineBam () {
   
   #soft clipping alignment that hangs off end of reference & set MAPQ to 0 for unmapped reads
   printProgress "[refineBAM] Refining $FILE_RAW_BAM"
-  $JAVA $CLEANSAM I=$FILE_RAW_BAM O=$FILE_CLEANED_BAM
+  $JAVA $PICARD CleanSam I=$FILE_RAW_BAM O=$FILE_CLEANED_BAM
 
   printProgress "[refineBAM] Sorting by coordinates..."
   $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE_SORTED_BAM $FILE_CLEANED_BAM
     
   printProgress "[refineBAM] Marking duplicates..." #not removing the duplicates
-  $JAVA $MARKDUPS I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt"
+  $JAVA $PICARD MarkDuplicates I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt"
 
-  mv $FILE_BAM $CURRENT_DIRECTORY/$FOLDER_NAME/
-  printProgress "[refineBAM] Final $FILE_BAM is moved to $CURRENT_DIRECTORY/$FOLDER_NAME."
+  mv $FILE_BAM $BAM_FOLDER
+  printProgress "[refineBAM] Final $FILE_BAM is moved to $BAM_FOLDER."
   
   rm $NAME*".bam" #remove all the buffer bam files
 
@@ -680,7 +691,15 @@ function collapseReplicates () {
 
         printProgress "[collapseReplicates] Indexing BAM file..."
         $SAMTOOLS index ${MERGED_BAM//.bam/}* #index merged & replicates (if available)
+
+        if [[ $KEEP_REPLICATES ]]; then
+				  local REP_DIR=$(dirname $FILE)/"Reps" 
+				  mkdir -p $REP_DIR
+				  printProgress "[collapseReplicates] Moving all replicates into $REP_DIR..."
+				  mv ${MERGED_BAM//.bam/)*_[Rr]ep* $REP_DIR
+        fi
 			fi
+			
     else
       printProgress "[collapseReplicates] No replicates for $FILE"
       MERGED_BAM=$FILE
@@ -689,7 +708,7 @@ function collapseReplicates () {
 		fi
 
     printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
-    $SAMTOOLS flagstat $MERGED_BAM #TODO
+    $SAMTOOLS flagstat $MERGED_BAM #TODO: DO we need the flagStats?
 		
 	done
 
@@ -725,6 +744,109 @@ function obtainFastqFromBAM () {
   cd $CURRENT_DIRECTORY
 }
 
+### Create neccessary files for reference genome
+function setGenome () {
+	if [ $FASTQ_ONLY = false ] ; then
+		mkdir -p $TRACK_HUB_DIR
+		printf "hub <name>\nshortLabel <short name>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email>" > ./TRACK_HUB_DIR/hub.txt
+	fi
+  
+  MOUSE="." #TODO
+  RAT="."   #CURRENTLY BRC LOCATION!
+
+  case $1 in
+		"mm9")
+			GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
+			BISMARK_GENOME_DIR=$GENOME_DIR
+			BOWTIE_GENOME_DIR=$GENOME_DIR
+			if [ $FASTQ_ONLY = false ]; then
+				printf "chr5\t143666090\t143666091" > Actb.bed
+				TRACK_FOLDER=$TRACK_HUB_DIR/$1
+				mkdir $TRACK_FOLDER
+				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+				printf "genome mm9\ntrackDb mm9/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
+			fi
+			;;
+		"mm10")
+		  GENOME_DIR=$GENOME_DIR/$MOUSE/$1/ 
+			if [ $FASTQ_ONLY = false ] ; then
+				printf "chr5\t142904365\t142904366" > Actb.bed
+				TRACK_FOLDER=$TRACK_HUB_DIR/$1
+				mkdir $TRACK_FOLDER
+				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+				printf "genome mm10\ntrackDb mm10/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
+			fi
+			;;
+		"rn6")
+		  GENOME_DIR=$GENOME_DIR/$RAT/$1/
+			if [ $FASTQ_ONLY = false ] ; then
+				printf "chr12\t13718023\t13718024" > Actb.bed
+        TRACK_FOLDER=$TRACK_HUB_DIR/$1
+				mkdir $TRACK_FOLDER
+				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+				printf "genome rn6\ntrackDb rn6/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
+			fi
+			;;
+		"rn5")
+		  GENOME_DIR=$GENOME_DIR/$RAT/$1/
+			if [ $FASTQ_ONLY = false ] ; then
+				printf "chr12\t15748011\t15748012" > Actb.bed
+				TRACK_FOLDER=$TRACK_HUB_DIR/$1
+				mkdir $TRACK_FOLDER
+				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+				printf "genome rn5\ntrackDb rn5/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
+			fi
+			;;
+    "hg19")
+      GENOME_DIR=$GENOME_DIR/"Hsa"/$1/
+			if [ $FASTQ_ONLY = false ] ; then
+				printf "chr7\t5527531\t5527532" > Actb.bed
+				TRACK_FOLDER=$TRACK_HUB_DIR/$1
+				mkdir $TRACK_FOLDER
+				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+				printf "genome hg19\ntrackDb hg19/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
+			fi
+			;;
+		"oryCun2")
+		  GENOME_DIR=$GENOME_DIR/"oryCun"/$1/
+			if [ $FASTQ_ONLY = false ] ; then
+				printf "chr7\t87232876\t87232877" > Actb.bed
+				TRACK_FOLDER=$TRACK_HUB_DIR/$1
+				mkdir $TRACK_FOLDER
+				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+				printf "genome oryCun2\ntrackDb oryCun2/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
+			fi
+			;;
+		"mesAur1")
+		  GENOME_DIR=$GENOME_DIR/"mesAur"/$1/
+			if [ $FASTQ_ONLY = false ] ; then
+				printf "KB708222.1\t2764075\t2764076" > Actb.bed
+				TRACK_FOLDER=$TRACK_HUB_DIR/$1
+				mkdir $TRACK_FOLDER
+				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+				printf "genome mesAur1\ntrackDb mesAur1/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
+			fi
+			;;
+		*)
+			echo -e "ERROR: \t$1 is not a valid genome build. Enter -h for help."
+			exit 1
+			;;
+	esac
+
+  CHROM_SIZES=$GENOME_DIR/$1".sizes"
+  GENOME_FILE=$GENOME_DIR/$1".fa"
+  STAR_GENOME_DIR=$GENOME_DIR/$1"-STAR"
+  BISMARK_GENOME_DIR=$GENOME_DIR
+  BOWTIE2_INDEXES=$GENOME_DIR
+
+  DIPLOID_GENOME_DIR=$GENOME_DIR/diploid
+  HAPLOID_GENOME_DIR=$GENOME_DIR/haploid
+  
+	checkFileExists $CHROM_SIZES
+  checkFileExists $GENOME_FILE
+  
+}
+
 ### Checking dependencies of the functions
 function checkDependencies () {
 	printProgress "[setup checkDependencies] Checking Dependencies [$(date)]"
@@ -742,130 +864,6 @@ function checkDependencies () {
 	fi
 }
 
-### Create neccessary files for reference genome
-function setGenome () {
-	if [ $FASTQ_ONLY = false ] ; then
-		mkdir -p Track_Hub
-		printf "hub <name>\nshortLabel <short name>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email>" > ./Track_Hub/hub.txt
-	fi
-  
-  MOUSE="." #TODO
-  RAT="."   
-
-  case $1 in
-		"mm9")
-			mkdir -p Track_Hub/mm9
-			GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
-			CHROM_SIZES=$GENOME_DIR/"mm9.sizes"
-			GENOME_FILE=$GENOME_DIR/"mm9.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/"mm9-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR
-			if [ $FASTQ_ONLY = false ]; then
-				printf "chr5\t143666090\t143666091" > Actb.bed
-				TRACK_FOLDER="./Track_Hub/mm9/"
-				mkdir $TRACK_FOLDER
-				TRACKDB="./Track_Hub/mm9/trackDb.txt"
-				printf "genome mm9\ntrackDb mm9/trackDb.txt" > ./Track_Hub/genomes.txt
-			fi
-			;;
-		"mm10")
-		  GENOME_DIR=$GENOME_DIR/$MOUSE/$1/ #currently BRC version
-			CHROM_SIZES=$GENOME_DIR/"mm10.sizes"
-			GENOME_FILE=$GENOME_DIR/"mm10.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/"mm10-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR
-			if [ $FASTQ_ONLY = false ] ; then
-				printf "chr5\t142904365\t142904366" > Actb.bed
-				TRACK_FOLDER="./Track_Hub/mm10/"
-				mkdir $TRACK_FOLDER
-				TRACKDB="./Track_Hub/mm10/trackDb.txt"
-				printf "genome mm10\ntrackDb mm10/trackDb.txt" > ./Track_Hub/genomes.txt
-			fi
-			;;
-		"rn6")
-		  GENOME_DIR=$GENOME_DIR/$RAT/$1/
-			CHROM_SIZES=$GENOME_DIR/"rn6.sizes"
-			GENOME_FILE=$GENOME_DIR/"rn6.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/"rn6-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR
-			if [ $FASTQ_ONLY = false ] ; then
-				printf "chr12\t13718023\t13718024" > Actb.bed
-				TRACK_FOLDER="./Track_Hub/rn6/"
-				mkdir $TRACK_FOLDER
-				TRACKDB="./Track_Hub/rn6/trackDb.txt"
-				printf "genome rn6\ntrackDb rn6/trackDb.txt" > ./Track_Hub/genomes.txt
-			fi
-			;;
-		"rn5")
-		  GENOME_DIR=$GENOME_DIR/$RAT/$1/
-			CHROM_SIZES=$GENOME_DIR/"rn5.sizes"
-			GENOME_FILE=$GENOME_DIR/"rn5.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/"rn5-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR
-			if [ $FASTQ_ONLY = false ] ; then
-				printf "chr12\t15748011\t15748012" > Actb.bed
-				TRACK_FOLDER="./Track_Hub/rn5/"
-				mkdir $TRACK_FOLDER
-				TRACKDB="./Track_Hub/rn5/trackDb.txt"
-				printf "genome rn5\ntrackDb rn5/trackDb.txt" > ./Track_Hub/genomes.txt
-			fi
-			;;
-    "hg19")
-      GENOME_DIR=$GENOME_DIR/"Hsa"/$1/
-			CHROM_SIZES=$GENOME_DIR/"hg19.sizes"
-			GENOME_FILE=$GENOME_DIR/"hg19.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/"hg19-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR
-			if [ $FASTQ_ONLY = false ] ; then
-				printf "chr7\t5527531\t5527532" > Actb.bed
-				TRACK_FOLDER="./Track_Hub/hg19/"
-				mkdir $TRACK_FOLDER
-				TRACKDB="./Track_Hub/hg19/trackDb.txt"
-				printf "genome hg19\ntrackDb hg19/trackDb.txt" > ./Track_Hub/genomes.txt
-			fi
-			;;
-		"oryCun2")
-		  GENOME_DIR=$GENOME_DIR/"oryCun"/$1/
-			CHROM_SIZES=$GENOME_DIR/"oryCun2.sizes"
-			GENOME_FILE=$GENOME_DIR/"oryCun2.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/"oryCun2-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR
-			if [ $FASTQ_ONLY = false ] ; then
-				printf "chr7\t87232876\t87232877" > Actb.bed
-				TRACK_FOLDER="./Track_Hub/oryCun2/"
-				mkdir $TRACK_FOLDER
-				TRACKDB="./Track_Hub/oryCun2/trackDb.txt"
-				printf "genome oryCun2\ntrackDb oryCun2/trackDb.txt" > ./Track_Hub/genomes.txt
-			fi
-			;;
-		"mesAur1")
-		  GENOME_DIR=$GENOME_DIR/"mesAur"/$1/
-			CHROM_SIZES=$GENOME_DIR/"mesAur1.sizes"
-			GENOME_FILE=$GENOME_DIR/"mesAur1.fa"
-			STAR_GENOME_DIR=$GENOME_DIR/"mesAur1-STAR"
-			BISMARK_GENOME_DIR=$GENOME_DIR
-			if [ $FASTQ_ONLY = false ] ; then
-				printf "KB708222.1\t2764075\t2764076" > Actb.bed
-				TRACK_FOLDER="./Track_Hub/mesAur1/"
-				mkdir $TRACK_FOLDER
-				TRACKDB="./Track_Hub/mesAur1/trackDb.txt"
-				printf "genome mesAur1\ntrackDb mesAur1/trackDb.txt" > ./Track_Hub/genomes.txt
-			fi
-			;;
-		*)
-			echo $1 "is not a valid genome build. Enter -h for help."
-			exit 1
-			;;
-	esac
-}
-
-### Cleaning buffer files produced by STAR during RNA alignment
-#function cleanSTAR () { #TODO Make this more specific?
-#	rm -r $TEMP_DIR/*$SEARCH_KEY*"STAR"
-#	rm $TEMP_DIR/*tab
-#	rm -r $TEMP_DIR/*"STAR"*
-#}
-
 function removeFASTQ () {
   if [[ $KEEP_FASTQ == false ]]; then
     echo "Not keeping fastq..."
@@ -879,56 +877,253 @@ function removeFASTQ () {
   fi
 }
 
-function cleanBAMS () { # Remove noncanonical chr alignments
-	TEMP=$TEMP_DIR/"temp.bam"
-	for FILE in */*.bam
-	do
-		echo "Cleaning" $FILE
-		$SAMTOOLS view -h $FILE | awk 'BEGIN {OFS="\t"} {
-			if ( $1 !~ /^@/ ) {
-				if ( $3 !~ /chr[0-9XYM]*$/ ) {
-					$3 = "*";
-					$4 = 0;
-					$5 = 0;
-				}
-			}
-			print $0;
-		}' | $SAMTOOLS view -b -o $TEMP
-		$SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE $TEMP
-		rm $TEMP
-	done
-}
-
-function fixMates () {
-	TEMP=$TEMP_DIR/"temp.bam"
-	SORT=$TEMP_DIR/"sort.bam"
-	for FILE in */*.bam
-	do
-		echo "Fixing mates in" $FILE
-		$SAMTOOLS sort -n -@ $RUN_THREAD -m $THREAD_MEM -o $SORT $FILE
-		$SAMTOOLS fixmate $SORT $TEMP
-		$SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE $TEMP
-		rm $SORT
-	done
-}
-
 function printProgress {
   echo -e $1 | tee -a $LOG_FILE #using tee will also show in stdout
 }
 
 function checkFileExists {
-    if [ ! -f $1 ]; then
-        echo "Error: File $1 does not exist" | tee -a $SEARCH_KEY"_log.txt"
-        exit 1
-    fi
+  if [ ! -f $1 ]; then
+    echo "ERROR:\tFile $1 does not exist"
+    exit 1
+  fi
 }
 
-############### ALLELE-SPECIFIC FUNCTIONS ###############
 
 
-############### TRACK-HUB FUNCTIONS ###############
+########################################
+#       ALLELE-SPECIFIC FUNCTIONS      #
+########################################
+function checkPseudogenome() {
+  if [[ $ALLELE_SPECIFIC && $PARALLEL ]]; then
+
+    cd $TEMP_DIR
+    
+    CROSS_LIST=$(awk '($3!="" || $4!="") {print $3"_"$4}' $INPUT_FILE | sort | uniq) #create array of crosses
+    EXIT_SCRIPT=false
+
+    for CROSS in $CROSS_LIST; do
+      HAPLO_1=${CROSS//_*}
+      HAPLO_2=${CROSS##*_}
+
+      if [[ -z $HAPLO_1 || -z $HAPLO_2 ]]; then
+        echo -e "ERROR:\t One of your samples only have 1 haplotype entered. \nPlease ensure both haplotypes are entered for allele specific pipeline" \
+        | tee -a 
+        EXIT_SCRIPT=true
+        continue #continue to next iteration of cross
+      fi
+
+      MAKE_GENOME=true
+      
+      for DIP in $DIPLOID_GENOME_DIR/*; do #searching for folder with name of both haplotypes
+        if [[ $DIP == *$HAPLO_1* && $DIP == *$HAPLO_2* ]]; then
+          MAKE_GENOME=false
+
+          if [[ ! -f $HAPLOID_GENOME_DIR/$HAPLO_1/$HAPLO_1".fa.refmap" || \
+                ! -f $HAPLOID_GENOME_DIR/$HAPLO_2/$HAPLO_2".fa.refmap"]; then #check RefMaps exist
+            echo -e "ERROR:\t One of the refmap ($HAPLO_1 or $HAPLO_2) doesn't exists."
+            EXIT_SCRIPT=true
+          fi
+
+          echo "Reference genome for $CROSS is found"
+          break #exit the loop of iterating thru all the diploid genomes for this combo of cross 
+        fi
+      done
+
+      if $MAKE_GENOME; then
+        echo "ERROR:\t Diploid genome was not found for $CROSS. \nPlease use provided CreateDipPseudoGenome.sh to obtain diploid pseudogenome."
+        EXIT_SCRIPT=true
+      fi
+      
+    done
+
+    cd $CURRENT_DIRECTORY
+    
+    if $EXIT_SCRIPT; then
+      echo -e "Errors were found with setup. \nPlease check error message before running again." 
+      exit #exit script to ensure input is formatted correctly before running the whole script
+    fi
+  fi  
+}
+
+function setPseudogenome () {
+  NAME=$SEARCH_KEY
+  printProgress "[setPseudogenome] Started at [$(date)]"
+  
+  HAPLO_1=$(grep -e $NAME $INPUT_FILE | cut -f3 | head -n 1)
+  HAPLO_2=$(grep -e $NAME $INPUT_FILE | cut -f4 | head -n 1)
+
+  if [[ -z $HAPLO_1 || -z $HAPLO_2 ]]; then #if either haplotype is not entered, no allele specific for this data
+    printProgress "[setPseudogenome] Haplotypes not provided, allele specific pipeline is not ran on $NAME"
+    continue #dont continue the function for this SRACODE entry (move on to next code)
+  fi
+  
+  CROSS_COMBO=$HAPLO_1"_"$HAPLO_2
+  printProgress "[setPseudogenome] Haplotypes for $NAME are $HAPLO_1 and $HAPLO_2."
+  
+  for DIP in $DIPLOID_GENOME_DIR/*; do #searching for folder with name of both haplotypes
+    if [[ $DIP == *$HAPLO_1* && $DIP == *$HAPLO_2* ]]; then
+      GENOME_BUILD=$(basename $DIP)
+      GENOME_FILE=$DIP/*".fa"
+      STAR_GENOME_DIR=$DIP/*"-STAR"
+      BOWTIE2_INDEXES=$DIP
+
+      HAPLO_1_REFMAP=$HAPLOID_GENOME_DIR/$HAPLO_1/$HAPLO_1".fa.refmap"    
+      HAPLO_2_REFMAP=$HAPLOID_GENOME_DIR/$HAPLO_2/$HAPLO_2".fa.refmap"
+
+      printProgress "[setPseudogenome] Reference directory for $NAME is set to $DIP"
+      break
+    fi
+  done
+}
+
+function unpackAllelic () { #working on bam that has already aligned to the pseudogenome (once per haplotype)
+  cd $TEMP_DIR
+  local HAPLO=$1
+
+  printProgress "[unpackAllelic] Unpacking for $HAPLO started at [$(date)]"
+  
+  for TOT_RAW_BAM in $TEMP_DIR/$SEARCH_KEY*"_raw.bam" #should be in replicates (NAME1_rep1_raw.bam)
+  
+  #take SAM file, align to pseudogenome
+  #split header into two, to separate the reads into two haplotypes, rename chr from hap1_chr to chr
+    NAME_HAPLO=$SEARCH_KEY"_"$HAPLO"_q$MIN_MAPQ"${TOT_RAW_BAM//$SEARCH_KEY/} #inserting haplotype name ( -> NAME1_HAPLO_MINMAPQ_rep1_raw.bam)
+    NAME=${NAME_HAPLO//_raw.bam/} #will include _rep if applicable
+    FILE_RAW_BAM=$NAME"_raw.bam"
+
+    printProgress "[unpackAlleleic $HAPLO] Obtaining haplotype-specific header..."
+    $SAMTOOLS view -H $TOT_RAW_BAM \ 
+    | awk '($0 ~ "'$HAPLO'") {print $0}' \ #take lines that include the haplotype name (haplotype_specific chrom & commands)
+    | sed 's/'$HAPLO'_chr/chr/g' > $FILE_RAW_BAM
+
+    # get UNIQUELY ALIGNED READS, separate into two files, only keep reads where their mate also maps to the same chromo of the same haplotype
+    # uniquely aligned defined by MIN_MAPQ
+    printProgress "[unpackAlleleic $HAPLO] Obtaining haplotype-specific reads with MAPQ >= $MIN_MAPQ"
+    $SAMTOOLS view $TOT_RAW_BAM -q $MIN_MAPQ \
+    | awk '(($3 ~ "'$HAPLO'")&&($7 ~ "'$HAPLO'" || $7 == "*" || $7 == "=")) {print $0}' \
+    | sed 's/'$HAPLO'_chr/chr/g' >> $FILE_RAW_BAM
+
+    printProgress "[unpackAlleleic $HAPLO] Finished unpacking $TOT_RAW_BAM for $HAPLO -> $FILE_RAW_BAM"
+    
+    refineBAM
+#    cat $FILE"_markDupeMetrics.txt" >> $SEARCH_KEY"_alignLog.txt"
+
+    rm $TOT_RAW_BAM
+  done
+
+  printProgress "[unpackAllelic] Unpacking bams for $HAPLO completed at [$(date)]"
+  cd $CURRENT_DIRECTORY
+}
+
+function projectAllelic () {
+  if $ALLELE_RUN; then 
+    cd $TEMP_DIR
+
+    printProgress "[projectAllelic] Started at [$(date)]"
+    
+    for FILE_BAM in $CURRENT_DIRECTORY/$BAM_FOLDER_NAME/*".bam"
+      if [[ $FILE_BAM == *$HAPLO_1* || $FILE_BAM == *$HAPLO_2* ]] #only projecting bams that were aligned allele specifically
+        printProgress "[projectAllelic] Removing duplicates from $FILE_BAM with F=$FLAG"
+        local NAME_MAP_FLAG=${FILE_BAM//.bam/}"_F"$FLAG
+        FLAG_BAM=$NAME_MAP_FLAG".bam"
+        $SAMTOOLS view -bh -F $FLAG $FILE_BAM > $FLAG_BAM
+ 
+        #nonscaled projection
+        printProgress "[projectAllelic] Converting $FLAG_BAM to bedGraph"
+        $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_preProject.bedgraph"
+        prepWigAndProject $NAME_MAP_FLAG $NAME_MAP_FLAG"_preProject.bedgraph"
+        
+        #RPM scaled projection
+        local READ_COUNT=$(samtools view -c $FLAG_NAME".bam")
+        local SCALING_FACTOR=$(echo "scale=25; 1000000/$READ_COUNT" | bc) #calculating with 25 decimal places at least
+        printProgress "[projectAllelic RPM] Detected $READ_COUNT filtered reads"
+
+        if [[ $STRANDED_ALLELIC ]]; then #stranded RPM
+          printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 1st in pair..."              
+          local FIRST_PAIR_BAM=$NAME_MAP_FLAG"_firstInPair.bam"
+          $SAMTOOLS view -bh -f 0x0040 $FLAG_BAM > $FIRST_PAIR_BAM    
+          $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_first_pos_RPM.bedGraph"
+          $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_first_neg_RPM.bedGraph"
+          rm $FIRST_PAIR_BAM
+
+          printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 2nd in pair..."
+          local SECOND_PAIR_BAM=$NAME_MAP_FLAG"_secondInPair.bam"
+          $SAMTOOLS view -bh -f 0x0080 $FLAG_BAM > $SECOND_PAIR_BAM
+          $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
+          $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
+          rm $SECOND_PAIR_BAM
+
+          #plus/pos strand
+          printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for plus strand..."
+          $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph" > $NAME_MAP_FLAG"_p_tmp.bedGraph"
+          rm $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
+          awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_p_tmp.bedGraph" > $NAME_MAP_FLAG"_pos_preProject.bedGraph"
+          rm $NAME_MAP_FLAG"_p_tmp.bedGraph"
+          prepWigAndProject $NAME_MAP_FLAG"_RPM_pos" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " plus stranded RPM"
+
+          #minus/neg strand
+          printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for minus strand..."         
+          $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph" > $NAME_MAP_FLAG"_n_tmp.bedGraph"
+          rm $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
+          awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_n_tmp.bedGraph" > $NAME_MAP_FLAG"_neg_preProject.bedGraph"
+          rm $NAME_MAP_FLAG"_n_tmp.bedGraph"
+          prepWigAndProject $NAME_MAP_FLAG"_RPM_neg" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " minus stranded RPM"
+
+        else #unstranded RPM
+          printProgress "[projectAllelic unstranded RPM] Converting $FLAG_BAM to bedGraph"
+          $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_RPM_preProject.bedgraph"
+          prepWigAndProject $NAME_MAP_FLAG"_RPM" $NAME_MAP_FLAG"_RPM_preProject.bedgraph" " unstranded RPM"
+        fi
+      fi
+    done
+
+    printProgress "[projectAllelic] All haplotype-specific bams have completed projection at [$(date)]"
+    cd $CURRENT_DIRECTORY
+  fi
+}
+
+function prepWigAndProject () {
+  local FINAL_NAME=$1
+  local PRE_BEDGRAPH=$2
+  local PROGRESS_APPEND=$3
+
+  printProgress "[projectAllelic$PROGRESS_APPEND] Converting $PRE_BEDGRAPH to WIG"
+  local PRE_WIG=$FINAL_NAME"_preProject.wig"
+  awk '
+  #prepare track parameteres
+  BEGIN {
+         print "track type=wiggle_0 name="'$FINAL_NAME'"\ndescription="'$PRE_BEDGRAPH'"\nvisibility=full"
+  }
+  #only process lines with 4 fields
+  NF == 4 {
+           print "fixedStep chrom="$1" start="$2+1" step=1 span=1" 
+           for (i = 0; i < $3-$2; i++) {
+                 print $4
+          }
+  }' $PRE_BEDGRAPH > $PRE_WIG
+  gzip $PRE_WIG
+  
+  printProgress "[projectAllelic$PROGRESS_APPEND ALEA] Projecting $PRE_WIG and refmap files to reference coordinates"
+  local PROJECTED_BEDGRAPH=$FINAL_NAME".bedgraph" #output bedgraph with reference genome coordinates
+  if [[ $PRE_WIG == *$HAPLO_1* ]]; then
+    $ALEA project --input-wig=$PRE_WIG".gz" --input-refmaps=$HAPLO_1_REFMAP --output-bedgraph=$PROJECTED_BEDGRAPH
+    elif [[ $PRE_WIG == *$HAPLO_2* ]]; then
+    $ALEA project --input-wig=$PRE_WIG".gz" --input-refmaps=$HAPLO_2_REFMAP --output-bedgraph=$PROJECTED_BEDGRAPH
+  fi
+
+  mv $PROJECTED_BEDGRAPH $CURRENT_DIRECTORY/TrackHub/
+  
+  #maybe can integrate with masterTrackHub
+  printProgress "[projectAllelic$PROGRESS_APPEND] Converting projected $PROJECTED_BEDGRAPH to BIGWIG"
+  $BEDGRAPHTOBW $PROJECTED_BEDGRAPH $CHROM_SIZES $FINAL_NAME".bw"
+}
+
+
+
+########################################
+#          TRACK-HUB FUNCTIONS         #
+########################################
 function masterTrackHub () {
-  BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates "
+  BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH_WIN --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates "
 
   PRINTED_DIR=""
   
@@ -940,8 +1135,8 @@ function masterTrackHub () {
     if [[ $BIN_SIZE != 1 ]] ; then
 		  FILE_NAME+="_b"$BIN_SIZE
 	  fi
-	  if [[ $SMOOTH != 0 ]] ; then
-		  FILE_NAME+="_s"$SMOOTH
+	  if [[ $SMOOTH_WIN != 0 ]] ; then
+		  FILE_NAME+="_s"$SMOOTH_WIN
 	  fi
 
     FOLDER_NAME=${FILE_2%%\/*} #removing longest text of the matching pattern
