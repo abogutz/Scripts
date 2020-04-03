@@ -543,6 +543,9 @@ function masterAlign () {
       alignSTAR
     elif [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"PBAT"* ]]; then
       alignBismark
+    elif [[ $FILE == *"HiC" ]]; then
+      alignHiCUP
+      continue #for HiC data, you don't need to refine BAM
     else
       if $ALLELE_SPECIFIC || $USE_BOWTIE; then
         alignBowtie2
@@ -561,6 +564,10 @@ function masterAlign () {
 
   printProgress "[masterAlign] Alignment of $SEARCH_KEY fastq files to $GENOME_BUILD completed at [$(date)]"
 
+  if [[ $TYPE == "Hi-C" ]]; then
+    exit #for HiC data, the rest of script doesn't need to be run (only to align with download and align with HiCUP"\
+  fi
+  
   cd $CURRENT_DIRECTORY
 }
 
@@ -606,6 +613,25 @@ function alignBismark () {
   mv $BISMARK_OUTPUT $FILE_RAW_BAM
   cleanBismark
   rm *report.txt
+}
+
+### Alignment of HiC data with HiCUP, assumed to be paired end 
+function alignHiCUP () {
+  ENZYME=$(grep -e $NAME $INPUT_FILE | cut -f5 | head -n 1) 
+
+  if [[ -z $ENZYME ]]; then
+    printProgress "[masterAlign HiCUP] ERROR:\tDigestion enzyme was not entered for $SEARCH_KEY HiC dataset..."
+    exit 1
+  fi
+    
+  printProgress "[masterAlign HiCUP] Digesting $GENOME_BUILD with $ENZYME"
+  hicup_digester --re1 $ENYZME --outdir $TEMP_DIR  --genome $GENOME_BUILD"_"$SEARCH_KEY $GENOME_FILE
+  local DIGEST_FILE=$(ls $TEMPDIR/Digest*$SEARCH_KEY*)
+
+  printProgress "[masterAlign HiCUP] Aligning $NAME to $GENOME_BUILD"
+  $HICUP --bowtie2 $BOWTIE2_DIR/bowtie2 --digest $DIGEST_FILE --index $GENOME_DIR/$GENOME_BUILD --outdir $BAM_FOLDER --temp $TEMP_DIR --threads $RUN_THREAD $NAME"_1.fastq.gz" $NAME"_2.fastq.gz"
+
+  printProgress "[masterAlign HiCUP] Alignment completed -> $FILE_RAW_BAM"
 }
 
 ### Alignment of ChIP data with BWA
@@ -898,7 +924,7 @@ function checkPseudogenome() {
 
     cd $TEMP_DIR
     
-    CROSS_LIST=$(awk '($3!="" || $4!="") {print $3"_"$4}' $INPUT_FILE | sort | uniq) #create array of crosses
+    CROSS_LIST=$(awk '(NF==4 && ($3!="" || $4!="")) {print $3"_"$4}' $INPUT_FILE | sort | uniq) #create array of crosses
     EXIT_SCRIPT=false
 
     for CROSS in $CROSS_LIST; do
@@ -979,7 +1005,7 @@ function setPseudogenome () {
 function unpackAllelic () { #working on bam that has already aligned to the pseudogenome (once per haplotype)
   cd $TEMP_DIR
   local HAPLO=$1
-
+  
   printProgress "[unpackAllelic] Unpacking for $HAPLO started at [$(date)]"
   
   for TOT_RAW_BAM in $TEMP_DIR/$SEARCH_KEY*"_raw.bam" #should be in replicates (NAME1_rep1_raw.bam)
