@@ -1,5 +1,8 @@
 #! /bin/bash
-#source $FUNCTIONS_DIR/BRC.config
+
+pushd $(dirname $0) > /dev/null
+source $(pwd -P)/Graham.config
+popd > /dev/null
 
 CURRENT_DIRECTORY=$(pwd)
 
