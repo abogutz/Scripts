@@ -7,13 +7,13 @@
 #TODO: alter any system specific variables and tools path through config file
 #Ensure function and config files are within same directory (sourcing will not work otherwise)
 
-if [[ -z $FUNCTIONS_DIR]]; then #if want to use functions by themselves
+if [[ -z $FUNCTIONS_DIR ]]; then #if want to use functions by themselves
   pushd $(dirname $0) > /dev/null
   FUNCTIONS_DIR=$(pwd -P)
   popd > /dev/null
 fi
 
-source $FUNCTIONS_DIR/BRC.config
+source $FUNCTIONS_DIR/Graham.config
 
 ## Non System Specific Variables
 CURRENT_DIRECTORY=$(pwd)
@@ -65,12 +65,12 @@ HELP_FULL="\n$HELP\n
 -F\tOnly output .fastq files.\n\t
 -g\tGenome build for alignment. Allowable: mm9, mm10, rn5, rn6,\n\t\toryCun2, mesAur1, or hg19. Default=mm10\n\t
 -k\tKeep .fastq files when done.\n\t
--m\tMemory to give each thread (Format=XG/M). Default=5G (Check in config file)\n\t
+-m\tMemory to give each thread (Format=XG/M).\n\t
 -M\tMinimum mapping quality for bigwig generation. Default=5\n\t
 -n\tBin size for bigwig generation. Larger bins to smooth noisy\n\t\tdata. Default=1\n\t
 -N\tNormalization method for bigwigs. Accepted: CPM, RPKM\n\t\t(Default=CPM)\n\t
 -r\tKeep replicates after collapsing. Default=false.\n\t
--s\tObtained stranded RPM tracks for allele-specific runs. Default=false\n\t
+-s\tObtained stranded RPM tracks for allele-specific runs.\n\t\tDefault=false\n\t
 -S\tUse of server to submit parallel jobs. Default=FALSE\n\t
 -t\tNumber of Threads to use. Default=6 (Check in config file)\n\t
 -T\tTrim .fastq files after download.\n\t
@@ -213,7 +213,7 @@ function setup () { #set up log file for parallel runs
 function setGenome () {
 	if [ $FASTQ_ONLY = false ] ; then
 		mkdir -p $TRACK_HUB_DIR
-		printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./TRACK_HUB_DIR/hub.txt
+		printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./$TRACK_HUB_DIR/hub.txt
 	fi
   
   MOUSE="." #TODO
@@ -878,7 +878,7 @@ function obtainFastqFromBAM () {
 
 ### Checking dependencies of the functions
 function checkDependencies () {
-	printProgress "[setup checkDependencies] Checking Dependencies [$(date)]"
+	printProgress "[ p checkDependencies] Checking Dependencies [$(date)]"
 	EXIT=0
 	for COMMAND in "${DEPENDENCIES[@]}"; do
 		printProgress "[setup checkDependencies] $COMMAND..."
@@ -947,8 +947,8 @@ function checkPseudogenome() {
         if [[ $DIP == *$HAPLO_1* && $DIP == *$HAPLO_2* ]]; then
           MAKE_GENOME=false
 
-          if [[ ! -f $HAPLOID_GENOME_DIR/$HAPLO_1/$HAPLO_1".fa.refmap" || \
-                ! -f $HAPLOID_GENOME_DIR/$HAPLO_2/$HAPLO_2".fa.refmap"]; then #check RefMaps exist
+          if [[ ! -f $HAPLOID_GENOME_DIR/$HAPLO_1/$HAPLO_1".fa.refmap" ]] || \
+             [[ ! -f $HAPLOID_GENOME_DIR/$HAPLO_2/$HAPLO_2".fa.refmap" ]]; then #check RefMaps exist
             echo -e "ERROR:\t One of the refmap ($HAPLO_1 or $HAPLO_2) doesn't exists."
             EXIT_SCRIPT=true
           fi
