@@ -1,4 +1,4 @@
-  #! /bin/bash
+#! /bin/bash
 #$ -cwd
 #$ -pe ncpus 3
 #$ -l h_vmem=12G
@@ -32,7 +32,6 @@ source $FUNCTIONS_DIR/SRAtoBW_functions.sh
 parseOptions $@ #parse options from command line to this function
 checkPseudogenome
 parallelRun
-checkDependencies
 
 masterDownload
 trimReads

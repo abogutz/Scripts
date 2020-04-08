@@ -209,6 +209,17 @@ function setup () { #set up log file for parallel runs
   fi
 }
 
+function printProgress () {
+  echo -e $1 | tee -a $LOG_FILE #using tee will also show in stdout
+}
+
+function checkFileExists () {
+  if [ ! -f $1 ]; then
+    echo "ERROR:\tFile $1 does not exist"
+    exit 1
+  fi
+}
+
 ### Create neccessary files for reference genome
 function setGenome () {
 	if [ $FASTQ_ONLY = false ] ; then
@@ -903,17 +914,6 @@ function removeFASTQ () {
       rm -r $FASTQ_DIR
     fi
 
-  fi
-}
-
-function printProgress () {
-  echo -e $1 | tee -a $LOG_FILE #using tee will also show in stdout
-}
-
-function checkFileExists () {
-  if [ ! -f $1 ]; then
-    echo "ERROR:\tFile $1 does not exist"
-    exit 1
   fi
 }
 
