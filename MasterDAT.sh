@@ -1,4 +1,4 @@
-#! /bin/bash
+  #! /bin/bash
 #$ -cwd
 #$ -pe ncpus 3
 #$ -l h_vmem=12G
@@ -16,15 +16,16 @@
 
 #TODO: alter any system specific variables and tools path through config file
 #TODO:Ensure functions, MasterDAT.sh and config files are within same directory (sourcing will not work otherwise)
-pushd $(dirname $0) > /dev/null
-FUNCTIONS_DIR=$(pwd -P)
-popd > /dev/null
+if [[ -z $FUNCTIONS_DIR ]]; then #if want to use functions by themselves
+  pushd $(dirname $0) > /dev/null
+  FUNCTIONS_DIR=$(pwd -P)
+  popd > /dev/null
+fi
 
 #############################################
 
 SHELL_SCRIPT=$FUNCTIONS_DIR/$(basename $0)
 source $FUNCTIONS_DIR/SRAtoBW_functions.sh
-source $FUNCTIONS_DIR/MEA_functions.sh
 
 ############### PIPELINE ###############
 
