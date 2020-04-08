@@ -906,11 +906,11 @@ function removeFASTQ () {
   fi
 }
 
-function printProgress {
+function printProgress () {
   echo -e $1 | tee -a $LOG_FILE #using tee will also show in stdout
 }
 
-function checkFileExists {
+function checkFileExists () {
   if [ ! -f $1 ]; then
     echo "ERROR:\tFile $1 does not exist"
     exit 1
