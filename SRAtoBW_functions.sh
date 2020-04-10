@@ -1012,11 +1012,10 @@ function unpackAllelic () { #working on bam that has already aligned to the pseu
   
   printProgress "[unpackAllelic] Unpacking for $HAPLO started at [$(date)]"
   
-  for TOT_RAW_BAM in $TEMP_DIR/$SEARCH_KEY*"_raw.bam" #should be in replicates (NAME1_rep1_raw.bam)
-  
-  #take SAM file, align to pseudogenome
-  #split header into two, to separate the reads into two haplotypes, rename chr from hap1_chr to chr
-    NAME_HAPLO=$SEARCH_KEY"_"$HAPLO"_q$MIN_MAPQ"${TOT_RAW_BAM//$SEARCH_KEY/} #inserting haplotype name ( -> NAME1_HAPLO_MINMAPQ_rep1_raw.bam)
+  for TOT_RAW_BAM in $TEMP_DIR/$SEARCH_KEY*"_raw.bam"; do #should be in replicates (NAME1_rep1_raw.bam)
+#take SAM file, align to pseudogenome
+#split header into two, to separate the reads into two haplotypes, rename chr from hap1_chr to chr
+    NAME_HAPLO_SUFFIX=$SEARCH_KEY"_"$HAPLO"_q$MIN_MAPQ"${TOT_RAW_BAM//$SEARCH_KEY/} #inserting haplotype name (-> NAME1_HAPLO_qMINMAPQ_rep1_raw.bam)
     NAME=${NAME_HAPLO//_raw.bam/} #will include _rep if applicable
     FILE_RAW_BAM=$NAME"_raw.bam"
 
