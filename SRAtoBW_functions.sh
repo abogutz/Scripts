@@ -7,13 +7,13 @@
 #TODO: alter any system specific variables and tools path through config file
 #Ensure function and config files are within same directory (sourcing will not work otherwise)
 
-if [[ -z $FUNCTIONS_DIR ]]; then #if want to use functions by themselves
+if [[ -z $SCRIPTS_DIR ]]; then #if want to use functions by themselves, can typically ignore
   pushd $(dirname $0) > /dev/null
-  FUNCTIONS_DIR=$(pwd -P)
+  SCRIPTS_DIR=$(pwd -P)
   popd > /dev/null
+  source $SCRIPTS_DIR/BRC.config
 fi
 
-source $FUNCTIONS_DIR/Graham.config
 
 ## Non System Specific Variables
 CURRENT_DIRECTORY=$(pwd)
@@ -193,18 +193,19 @@ function parseOptions () {
         ;;
     esac
   done
+  
   setGenome $GENOME_BUILD
-  setup
+  
 }
 
-function setup () { #set up log file for parallel runs
+function setUp () { #set up log file for parallel runs
   if [[ $SEP_PARA == false ]]; then 
     LOG_FILE=$SEARCH_KEY"_"$(date '+%y-%m-%d')"_log.txt"
     checkDependencies
-    printProgress "[setup] Script started at [$(date)]"
-    printProgress "[setup] Search key for the set: $SEARCH_KEY"
-    printProgress "[setup] SRA array: $CODE_ARRAY"
-    printProgress "[setup setGenome] Genome used for data is $GENOME_BUILD"
+    printProgress "[setUp] Script started at [$(date)]"
+    printProgress "[setUp] Search key for the set: $SEARCH_KEY"
+    printProgress "[setUp] SRA array: $CODE_ARRAY"
+    printProgress "[setUp setGenome] Genome used for data is $GENOME_BUILD"
     
   fi
 }
@@ -238,7 +239,7 @@ function setGenome () {
 			if [ $FASTQ_ONLY = false ]; then
 				printf "chr5\t143666090\t143666091" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir $TRACK_FOLDER
+				mkdir -p $TRACK_FOLDER
 				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
 				printf "genome mm9\ntrackDb mm9/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
 			fi
@@ -248,7 +249,7 @@ function setGenome () {
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr5\t142904365\t142904366" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir $TRACK_FOLDER
+				mkdir -p $TRACK_FOLDER
 				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
 				printf "genome mm10\ntrackDb mm10/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
 			fi
@@ -258,7 +259,7 @@ function setGenome () {
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr12\t13718023\t13718024" > Actb.bed
         TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir $TRACK_FOLDER
+				mkdir -p $TRACK_FOLDER
 				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
 				printf "genome rn6\ntrackDb rn6/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
 			fi
@@ -268,7 +269,7 @@ function setGenome () {
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr12\t15748011\t15748012" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir $TRACK_FOLDER
+				mkdir -p $TRACK_FOLDER
 				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
 				printf "genome rn5\ntrackDb rn5/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
 			fi
@@ -278,7 +279,7 @@ function setGenome () {
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr7\t5527531\t5527532" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir $TRACK_FOLDER
+				mkdir -p $TRACK_FOLDER
 				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
 				printf "genome hg19\ntrackDb hg19/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
 			fi
@@ -288,7 +289,7 @@ function setGenome () {
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "chr7\t87232876\t87232877" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir $TRACK_FOLDER
+				mkdir -p $TRACK_FOLDER
 				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
 				printf "genome oryCun2\ntrackDb oryCun2/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
 			fi
@@ -298,7 +299,7 @@ function setGenome () {
 			if [ $FASTQ_ONLY = false ] ; then
 				printf "KB708222.1\t2764075\t2764076" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir $TRACK_FOLDER
+				mkdir -p $TRACK_FOLDER
 				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
 				printf "genome mesAur1\ntrackDb mesAur1/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
 			fi
@@ -406,7 +407,7 @@ function masterDownload () {
   done
   cd $CURRENT_DIRECTORY
 
-  printProgress "[masterDownload] All fastq files for $SEARCH_KEY is downloaded at [$date]"
+  printProgress "[masterDownload] All fastq files for $SEARCH_KEY is downloaded at [$(date)]"
 
   if $FASTQ_ONLY; then
     printProgress "[masterDownload] Fastq files only. Exit script."
@@ -430,7 +431,7 @@ function downloadReads () {
   SRACODE=$code
   NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-  printProgress "[masterDownload wget] Downloading $SRACODE to $TEMP_DIR... at [$date]"
+  printProgress "[masterDownload wget] Downloading $SRACODE to $TEMP_DIR... at [$(date)]"
   for DL in $($ESEARCH -db sra -query $SRACODE \
               | $EFETCH --format runinfo \
               | cut -d ',' -f 10 \
@@ -661,12 +662,10 @@ function masterAlign () {
     elif [[ $FILE == *"HiC" ]]; then
       alignHiCUP
       continue #for HiC data, you don't need to refine BAM
+    elif $ALLELE_SPECIFIC || $USE_BOWTIE; then
+      alignBowtie2
     else
-      if $ALLELE_SPECIFIC || $USE_BOWTIE; then
-        alignBowtie2
-      else
-        alignBWA
-      fi
+      alignBWA
     fi
 
     if $ALLELE_RUN; then #allele specific run will need to do unpacking
@@ -793,8 +792,8 @@ function alignBowtie2 () {
 
 ### Sort and mark duplicates in BAM file after alignment
 function refineBam () {
-  FILE_CLEANED_BAM=$NAME"_cleaned.bam"
-  FILE_SORTED_BAM=$NAME"_sort.bam"
+  local FILE_CLEANED_BAM=$NAME"_cleaned.bam"
+  local FILE_SORTED_BAM=$NAME"_sort.bam"
   
   #soft clipping alignment that hangs off end of reference & set MAPQ to 0 for unmapped reads
   printProgress "[refineBAM] Refining $FILE_RAW_BAM"
@@ -809,7 +808,7 @@ function refineBam () {
   mv $FILE_BAM $BAM_FOLDER
   printProgress "[refineBAM] Final $FILE_BAM is moved to $BAM_FOLDER."
   
-  rm $NAME*".bam" #remove all the buffer bam files
+  rm $FILE_RAW_BAM $FILE_CLEANED_BAM $FILE_SORTED_BAM #remove all the buffer bam files
 
 }
 
@@ -860,36 +859,9 @@ function collapseReplicates () {
   cd $CURRENT_DIRECTORY
 }
 
-###Extract fastq file(s) from all bam within provided directory
-function obtainFastqFromBAM () {
-  cd $TEMP_DIR
-  for BAM_INPUT in $CURRENT_DIRECTORY/${1:-$BAM_REALIGNMENT_DIRECTORY}/*.bam; do
-    NAME=${BAM_INPUT##*/}
-    SORTED="temp_sorted.bam"
-    mkdir -p "temp"
-    OUTPUT="temp"/${NAME//.bam/#.fastq} #the # will be replaced by _1/_2 for PE reads in bam2fastq
-
-    echo "Sorting $NAME by read name..."
-    $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $SORTED -n $BAM_INPUT
-    echo "Extracting reads..."
-    $BAM2FASTQ -o $OUTPUT $SORTED
-    rm $SORTED
-
-    echo "Compressing fastq file(s)..."
-    for FILE in ${OUTPUT//#.fastq/*.fastq}; do
-      ( gzip $FILE
-        mv $FILE.gz ${FILE//temp/$CURRENT_DIRECTORY\/$FASTQ_DIRECTORY}.gz
-      ) &
-      COMPRESS_PID_ARRAY[$COMPRESS_COUNTER]=$!
-      ((COMPRESS_COUNTER++))
-    done
-  done
-  cd $CURRENT_DIRECTORY
-}
-
 ### Checking dependencies of the functions
 function checkDependencies () {
-	printProgress "[ p checkDependencies] Checking Dependencies [$(date)]"
+	printProgress "[checkDependencies] Checking Dependencies [$(date)]"
 	EXIT=0
 	for COMMAND in "${DEPENDENCIES[@]}"; do
 		printProgress "[setup checkDependencies] $COMMAND..."
@@ -918,10 +890,39 @@ function removeFASTQ () {
 }
 
 
+###Extract fastq file(s) from all bam within provided directory
+function obtainFastqFromBAM () {
+  cd $TEMP_DIR
+  for BAM_INPUT in $CURRENT_DIRECTORY/${1:-$BAM_REALIGNMENT_DIRECTORY}/*.bam; do
+    NAME=${BAM_INPUT##*/}
+    SORTED="temp_sorted.bam"
+    mkdir -p "temp"
+    OUTPUT="temp"/${NAME//.bam/#.fastq} #the # will be replaced by _1/_2 for PE reads in bam2fastq
+
+    echo "Sorting $NAME by read name..."
+    $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $SORTED -n $BAM_INPUT
+    echo "Extracting reads..."
+    $BAM2FASTQ -o $OUTPUT $SORTED
+    rm $SORTED
+
+    echo "Compressing fastq file(s)..."
+    for FILE in ${OUTPUT//#.fastq/*.fastq}; do
+      ( gzip $FILE
+        mv $FILE.gz ${FILE//temp/$CURRENT_DIRECTORY\/$FASTQ_DIRECTORY}.gz
+      ) &
+      COMPRESS_PID_ARRAY[$COMPRESS_COUNTER]=$!
+      ((COMPRESS_COUNTER++))
+    done
+  done
+  cd $CURRENT_DIRECTORY
+}
+
+
 
 ########################################
 #       ALLELE-SPECIFIC FUNCTIONS      #
 ########################################
+
 function checkPseudogenome() {
   if [[ $ALLELE_SPECIFIC && $PARALLEL ]]; then
 
@@ -1044,7 +1045,7 @@ function unpackAllelic () { #working on bam that has already aligned to the pseu
 }
 
 function projectAllelic () {
-  if $ALLELE_RUN; then 
+  if $ALLELE_SPECIFIC; then 
     cd $TEMP_DIR
 
     printProgress "[projectAllelic] Started at [$(date)]"
@@ -1151,6 +1152,7 @@ function prepWigAndProject () {
 ########################################
 #          TRACK-HUB FUNCTIONS         #
 ########################################
+
 function masterTrackHub () {
   BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH_WIN --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates"
 
