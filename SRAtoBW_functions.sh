@@ -79,7 +79,6 @@ HELP_FULL="\n$HELP\n
 
 
 
-
 ########################################
 #               FUNCTIONS              #
 ########################################
@@ -223,7 +222,7 @@ function checkFileExists () {
 
 ### Create neccessary files for reference genome
 function setGenome () {
-	if [ $FASTQ_ONLY = false ] ; then
+	if [[ $FASTQ_ONLY == false ]] ; then
 		mkdir -p $TRACK_HUB_DIR
 		printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./$TRACK_HUB_DIR/hub.txt
 	fi
@@ -559,46 +558,45 @@ function extractFastq () {
 ### Trim fastq files for adaptors using trimmomatic
 ### Could be called with $1=directory that holds fastq files
 function trimReads () {
-  if $TRIM_READ || [[ $1 != "" ]]; then #if a directory is fed into this function, then function will run on the directory
-    cd $TEMP_DIR
-    printProgress "[trimReads] Started at [$(date)]"
-    
-    for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
-      determinePairedFastq
-
-      if [[ $PAIRED_END ]]; then
-        printProgress "[trimReads] Trimming "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz..."
-
-        $TRIMMOMATIC PE -threads 10 $FASTQ_PATH"_1.fastq.gz" $FASTQ_PATH"_2.fastq.gz" \
-        $NAME"_trim_1.fastq.gz" $NAME"_unpaired_trim_1.fastq.gz" $NAME"_trim_2.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz" \
-        ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
-        SLIDINGWINDOW:4:20 \
-        MINLEN:36        
-        
-        mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
-        mv $NAME"_trim_2.fastq.gz" $FASTQ_PATH"_2.fastq.gz"
-
-      else #Single-End
-        printProgress "[trimReads] Trimming $NAME.fastq.gz"
-
-        $TRIMMOMATIC SE -threads 10 $FASTQ_PATH".fastq.gz" $FASTQ_PATH"_trim.fastq.gz" \
-        ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
-        SLIDINGWINDOW:4:20 \
-        MINLEN:36
-
-		    mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
-      fi
-
-      printProgress "[trimReads] Finished trimming and renaming fastq files for $NAME..."
-      
-    done
-    
-    rm *unpaired*
-  
-  else  
+  if [[ $TRIM_READ == false || [[ -z $1 ]]; then #exit script if not needed
     printProgress "[trimReads] Reads not trimmed."
-
+    return 0
   fi
+
+  cd $TEMP_DIR
+  printProgress "[trimReads] Started at [$(date)]"
+    
+  for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
+    determinePairedFastq
+
+    if [[ $PAIRED_END ]]; then
+      printProgress "[trimReads] Trimming "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz..."
+
+      $TRIMMOMATIC PE -threads 10 $FASTQ_PATH"_1.fastq.gz" $FASTQ_PATH"_2.fastq.gz" \
+      $NAME"_trim_1.fastq.gz" $NAME"_unpaired_trim_1.fastq.gz" $NAME"_trim_2.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz" \
+      ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
+      SLIDINGWINDOW:4:20 \
+      MINLEN:36        
+        
+      mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
+      mv $NAME"_trim_2.fastq.gz" $FASTQ_PATH"_2.fastq.gz"
+
+    else #Single-End
+      printProgress "[trimReads] Trimming $NAME.fastq.gz"
+
+      $TRIMMOMATIC SE -threads 10 $FASTQ_PATH".fastq.gz" $FASTQ_PATH"_trim.fastq.gz" \
+      ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
+      SLIDINGWINDOW:4:20 \
+      MINLEN:36
+
+		  mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
+    fi
+
+    printProgress "[trimReads] Finished trimming and renaming fastq files for $NAME..."
+      
+  done
+    
+  rm *unpaired*
   cd $CURRENT_DIRECTORY
 }
   
@@ -607,6 +605,7 @@ function determinePairedFastq () {
   if [[ $FILE == *"_2.fastq.gz" ]] ; then 
     continue #dont process 2nd read, continue to next iteration
   fi
+  
   if [[ $FILE == *"_1.fastq.gz" ]] ; then
     FASTQ_PATH=${FILE//_1.fastq.gz/} #removes everything that's after // - leaving path to directory
     NAME=${FASTQ_PATH##*/} #removes all prefixes prior to the last / - removing path to directory
@@ -924,7 +923,7 @@ function obtainFastqFromBAM () {
 ########################################
 
 function checkPseudogenome() {
-  if [[ $ALLELE_SPECIFIC && $PARALLEL ]]; then
+  if [[ $ALLELE_SPECIFIC && $SEP_PARA ]]; then
 
     cd $TEMP_DIR
     
@@ -1021,7 +1020,7 @@ function unpackAllelic () { #working on bam that has already aligned to the pseu
 
     printProgress "[unpackAllelic $HAPLO] Obtaining haplotype-specific header..."
     #take lines that include the haplotype name - haplotype_specific chrom & commands
-    $SAMTOOLS view -H $TOT_RAW_BAM 
+    $SAMTOOLS view -H $TOT_RAW_BAM \
     | awk '( $0 ~ "'$HAPLO'" ) {print $0}' \
     | sed 's/'$HAPLO'_chr/chr/g' > $FILE_RAW_BAM
 
@@ -1045,70 +1044,72 @@ function unpackAllelic () { #working on bam that has already aligned to the pseu
 }
 
 function projectAllelic () {
-  if $ALLELE_SPECIFIC; then 
-    cd $TEMP_DIR
+  if [[ $ALLELE_SPECIFIC == false ]]; then
+    return 0 #dont run this code if the script is not allele specific
+  fi 
 
-    printProgress "[projectAllelic] Started at [$(date)]"
+  cd $TEMP_DIR
+
+  printProgress "[projectAllelic] Started at [$(date)]"
     
-    for FILE_BAM in $CURRENT_DIRECTORY/$BAM_FOLDER_NAME/*".bam"; do
-      if [[ $FILE_BAM == *$HAPLO_1* || $FILE_BAM == *$HAPLO_2* ]]; then #only projecting bams that were aligned allele specifically
-        printProgress "[projectAllelic] Removing duplicates from $FILE_BAM with F=$FLAG"
-        local NAME_MAP_FLAG=${FILE_BAM//.bam/}"_F"$FLAG
-        FLAG_BAM=$NAME_MAP_FLAG".bam"
-        $SAMTOOLS view -bh -F $FLAG $FILE_BAM > $FLAG_BAM
+  for FILE_BAM in $CURRENT_DIRECTORY/$BAM_FOLDER_NAME/*".bam"; do
+    if [[ $FILE_BAM == *$HAPLO_1* || $FILE_BAM == *$HAPLO_2* ]]; then #only projecting bams that were aligned to pseudogenome
+      printProgress "[projectAllelic] Removing duplicates from $FILE_BAM with F=$FLAG"
+      local NAME_MAP_FLAG=${FILE_BAM//.bam/}"_F"$FLAG
+      FLAG_BAM=$NAME_MAP_FLAG".bam"
+      $SAMTOOLS view -bh -F $FLAG $FILE_BAM > $FLAG_BAM
  
-        #nonscaled projection
-        printProgress "[projectAllelic] Converting $FLAG_BAM to bedGraph"
-        $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_preProject.bedgraph"
-        prepWigAndProject $NAME_MAP_FLAG $NAME_MAP_FLAG"_preProject.bedgraph"
-        
-        #RPM scaled projection
-        local READ_COUNT=$(samtools view -c $FLAG_NAME".bam")
-        local SCALING_FACTOR=$(echo "scale=25; 1000000/$READ_COUNT" | bc) #calculating with 25 decimal places at least
-        printProgress "[projectAllelic RPM] Detected $READ_COUNT filtered reads"
+      #nonscaled projection
+      printProgress "[projectAllelic] Converting $FLAG_BAM to bedGraph"
+      $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_preProject.bedgraph"
+      prepWigAndProject $NAME_MAP_FLAG $NAME_MAP_FLAG"_preProject.bedgraph"
+       
+      #RPM scaled projection
+      local READ_COUNT=$(samtools view -c $FLAG_NAME".bam")
+      local SCALING_FACTOR=$(echo "scale=25; 1000000/$READ_COUNT" | bc) #calculating with 25 decimal places at least
+      printProgress "[projectAllelic RPM] Detected $READ_COUNT filtered reads"
 
-        if [[ $STRANDED_ALLELIC ]]; then #stranded RPM
-          printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 1st in pair..."              
-          local FIRST_PAIR_BAM=$NAME_MAP_FLAG"_firstInPair.bam"
-          $SAMTOOLS view -bh -f 0x0040 $FLAG_BAM > $FIRST_PAIR_BAM    
-          $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_first_pos_RPM.bedGraph"
-          $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_first_neg_RPM.bedGraph"
-          rm $FIRST_PAIR_BAM
+      if [[ $STRANDED_ALLELIC ]]; then #stranded RPM
+        printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 1st in pair..."              
+        local FIRST_PAIR_BAM=$NAME_MAP_FLAG"_firstInPair.bam"
+        $SAMTOOLS view -bh -f 0x0040 $FLAG_BAM > $FIRST_PAIR_BAM    
+        $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_first_pos_RPM.bedGraph"
+        $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_first_neg_RPM.bedGraph"
+        rm $FIRST_PAIR_BAM
 
-          printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 2nd in pair..."
-          local SECOND_PAIR_BAM=$NAME_MAP_FLAG"_secondInPair.bam"
-          $SAMTOOLS view -bh -f 0x0080 $FLAG_BAM > $SECOND_PAIR_BAM
-          $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
-          $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
-          rm $SECOND_PAIR_BAM
+        printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 2nd in pair..."
+        local SECOND_PAIR_BAM=$NAME_MAP_FLAG"_secondInPair.bam"
+        $SAMTOOLS view -bh -f 0x0080 $FLAG_BAM > $SECOND_PAIR_BAM
+        $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
+        $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
+        rm $SECOND_PAIR_BAM
 
-          #plus/pos strand
-          printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for plus strand..."
-          $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph" > $NAME_MAP_FLAG"_p_tmp.bedGraph"
-          rm $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
-          awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_p_tmp.bedGraph" > $NAME_MAP_FLAG"_pos_preProject.bedGraph"
-          rm $NAME_MAP_FLAG"_p_tmp.bedGraph"
-          prepWigAndProject $NAME_MAP_FLAG"_RPM_pos" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " plus stranded RPM"
+        #plus/pos strand
+        printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for plus strand..."
+        $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph" > $NAME_MAP_FLAG"_p_tmp.bedGraph"
+        rm $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
+        awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_p_tmp.bedGraph" > $NAME_MAP_FLAG"_pos_preProject.bedGraph"
+        rm $NAME_MAP_FLAG"_p_tmp.bedGraph"
+        prepWigAndProject $NAME_MAP_FLAG"_RPM_pos" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " plus stranded RPM"
 
-          #minus/neg strand
-          printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for minus strand..."         
-          $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph" > $NAME_MAP_FLAG"_n_tmp.bedGraph"
-          rm $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
-          awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_n_tmp.bedGraph" > $NAME_MAP_FLAG"_neg_preProject.bedGraph"
-          rm $NAME_MAP_FLAG"_n_tmp.bedGraph"
-          prepWigAndProject $NAME_MAP_FLAG"_RPM_neg" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " minus stranded RPM"
+        #minus/neg strand
+        printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for minus strand..."         
+        $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph" > $NAME_MAP_FLAG"_n_tmp.bedGraph"
+        rm $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
+        awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_n_tmp.bedGraph" > $NAME_MAP_FLAG"_neg_preProject.bedGraph"
+        rm $NAME_MAP_FLAG"_n_tmp.bedGraph"
+        prepWigAndProject $NAME_MAP_FLAG"_RPM_neg" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " minus stranded RPM"
 
-        else #unstranded RPM
-          printProgress "[projectAllelic unstranded RPM] Converting $FLAG_BAM to bedGraph"
-          $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_RPM_preProject.bedgraph"
-          prepWigAndProject $NAME_MAP_FLAG"_RPM" $NAME_MAP_FLAG"_RPM_preProject.bedgraph" " unstranded RPM"
-        fi
+      else #unstranded RPM
+        printProgress "[projectAllelic unstranded RPM] Converting $FLAG_BAM to bedGraph"
+        $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_RPM_preProject.bedgraph"
+        prepWigAndProject $NAME_MAP_FLAG"_RPM" $NAME_MAP_FLAG"_RPM_preProject.bedgraph" " unstranded RPM"
       fi
-    done
+    fi
+  done
 
-    printProgress "[projectAllelic] All haplotype-specific bams have completed projection at [$(date)]"
-    cd $CURRENT_DIRECTORY
-  fi
+  printProgress "[projectAllelic] All haplotype-specific bams have completed projection at [$(date)]"
+  cd $CURRENT_DIRECTORY
 }
 
 function prepWigAndProject () {
