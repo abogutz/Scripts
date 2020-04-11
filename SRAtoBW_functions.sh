@@ -205,7 +205,6 @@ function setUp () { #set up log file for parallel runs
     printProgress "[setUp] Search key for the set: $SEARCH_KEY"
     printProgress "[setUp] SRA array: $CODE_ARRAY"
     printProgress "[setUp setGenome] Genome used for data is $GENOME_BUILD"
-    
   fi
 }
 
@@ -558,7 +557,7 @@ function extractFastq () {
 ### Trim fastq files for adaptors using trimmomatic
 ### Could be called with $1=directory that holds fastq files
 function trimReads () {
-  if [[ $TRIM_READ == false || [[ -z $1 ]]; then #exit script if not needed
+  if [[ $TRIM_READ == false || -z $1 ]]; then #exit script if not needed
     printProgress "[trimReads] Reads not trimmed."
     return 0
   fi
@@ -888,7 +887,6 @@ function removeFASTQ () {
   fi
 }
 
-
 ###Extract fastq file(s) from all bam within provided directory
 function obtainFastqFromBAM () {
   cd $TEMP_DIR
@@ -1053,58 +1051,60 @@ function projectAllelic () {
   printProgress "[projectAllelic] Started at [$(date)]"
     
   for FILE_BAM in $CURRENT_DIRECTORY/$BAM_FOLDER_NAME/*".bam"; do
-    if [[ $FILE_BAM == *$HAPLO_1* || $FILE_BAM == *$HAPLO_2* ]]; then #only projecting bams that were aligned to pseudogenome
-      printProgress "[projectAllelic] Removing duplicates from $FILE_BAM with F=$FLAG"
-      local NAME_MAP_FLAG=${FILE_BAM//.bam/}"_F"$FLAG
-      FLAG_BAM=$NAME_MAP_FLAG".bam"
-      $SAMTOOLS view -bh -F $FLAG $FILE_BAM > $FLAG_BAM
+    if [[ $FILE_BAM != *$HAPLO_1* || $FILE_BAM != *$HAPLO_2* ]]; then #only projecting bams that were aligned to pseudogenome
+      continue
+    fi
+    
+    printProgress "[projectAllelic] Removing duplicates from $FILE_BAM with F=$FLAG"
+    local NAME_MAP_FLAG=${FILE_BAM//.bam/}"_F"$FLAG
+    FLAG_BAM=$NAME_MAP_FLAG".bam"
+    $SAMTOOLS view -bh -F $FLAG $FILE_BAM > $FLAG_BAM
  
-      #nonscaled projection
-      printProgress "[projectAllelic] Converting $FLAG_BAM to bedGraph"
-      $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_preProject.bedgraph"
-      prepWigAndProject $NAME_MAP_FLAG $NAME_MAP_FLAG"_preProject.bedgraph"
+    #nonscaled projection
+    printProgress "[projectAllelic] Converting $FLAG_BAM to bedGraph"
+    $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_preProject.bedgraph"
+    prepWigAndProject $NAME_MAP_FLAG $NAME_MAP_FLAG"_preProject.bedgraph"
        
-      #RPM scaled projection
-      local READ_COUNT=$(samtools view -c $FLAG_NAME".bam")
-      local SCALING_FACTOR=$(echo "scale=25; 1000000/$READ_COUNT" | bc) #calculating with 25 decimal places at least
-      printProgress "[projectAllelic RPM] Detected $READ_COUNT filtered reads"
+    #RPM scaled projection
+    local READ_COUNT=$(samtools view -c $FLAG_NAME".bam")
+    local SCALING_FACTOR=$(echo "scale=25; 1000000/$READ_COUNT" | bc) #calculating with 25 decimal places at least
+    printProgress "[projectAllelic RPM] Detected $READ_COUNT filtered reads"
 
-      if [[ $STRANDED_ALLELIC ]]; then #stranded RPM
-        printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 1st in pair..."              
-        local FIRST_PAIR_BAM=$NAME_MAP_FLAG"_firstInPair.bam"
-        $SAMTOOLS view -bh -f 0x0040 $FLAG_BAM > $FIRST_PAIR_BAM    
-        $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_first_pos_RPM.bedGraph"
-        $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_first_neg_RPM.bedGraph"
-        rm $FIRST_PAIR_BAM
+    if [[ $STRANDED_ALLELIC ]]; then #stranded RPM
+      printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 1st in pair..."              
+      local FIRST_PAIR_BAM=$NAME_MAP_FLAG"_firstInPair.bam"
+      $SAMTOOLS view -bh -f 0x0040 $FLAG_BAM > $FIRST_PAIR_BAM    
+      $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_first_pos_RPM.bedGraph"
+      $BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_first_neg_RPM.bedGraph"
+      rm $FIRST_PAIR_BAM
 
-        printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 2nd in pair..."
-        local SECOND_PAIR_BAM=$NAME_MAP_FLAG"_secondInPair.bam"
-        $SAMTOOLS view -bh -f 0x0080 $FLAG_BAM > $SECOND_PAIR_BAM
-        $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
-        $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
-        rm $SECOND_PAIR_BAM
+      printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 2nd in pair..."
+      local SECOND_PAIR_BAM=$NAME_MAP_FLAG"_secondInPair.bam"
+      $SAMTOOLS view -bh -f 0x0080 $FLAG_BAM > $SECOND_PAIR_BAM
+      $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
+      $BEDTOOLS genomecov -ibam $SECOND_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
+      rm $SECOND_PAIR_BAM
 
-        #plus/pos strand
-        printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for plus strand..."
-        $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph" > $NAME_MAP_FLAG"_p_tmp.bedGraph"
-        rm $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
-        awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_p_tmp.bedGraph" > $NAME_MAP_FLAG"_pos_preProject.bedGraph"
-        rm $NAME_MAP_FLAG"_p_tmp.bedGraph"
-        prepWigAndProject $NAME_MAP_FLAG"_RPM_pos" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " plus stranded RPM"
+      #plus/pos strand
+      printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for plus strand..."
+      $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph" > $NAME_MAP_FLAG"_p_tmp.bedGraph"
+      rm $NAME_MAP_FLAG"_first_neg_RPM.bedGraph" $NAME_MAP_FLAG"_second_pos_RPM.bedGraph"
+      awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_p_tmp.bedGraph" > $NAME_MAP_FLAG"_pos_preProject.bedGraph"
+      rm $NAME_MAP_FLAG"_p_tmp.bedGraph"
+      prepWigAndProject $NAME_MAP_FLAG"_RPM_pos" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " plus stranded RPM"
 
-        #minus/neg strand
-        printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for minus strand..."         
-        $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph" > $NAME_MAP_FLAG"_n_tmp.bedGraph"
-        rm $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
-        awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_n_tmp.bedGraph" > $NAME_MAP_FLAG"_neg_preProject.bedGraph"
-        rm $NAME_MAP_FLAG"_n_tmp.bedGraph"
-        prepWigAndProject $NAME_MAP_FLAG"_RPM_neg" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " minus stranded RPM"
+      #minus/neg strand
+      printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for minus strand..."         
+      $BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph" > $NAME_MAP_FLAG"_n_tmp.bedGraph"
+      rm $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
+      awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_n_tmp.bedGraph" > $NAME_MAP_FLAG"_neg_preProject.bedGraph"
+      rm $NAME_MAP_FLAG"_n_tmp.bedGraph"
+      prepWigAndProject $NAME_MAP_FLAG"_RPM_neg" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " minus stranded RPM"
 
-      else #unstranded RPM
-        printProgress "[projectAllelic unstranded RPM] Converting $FLAG_BAM to bedGraph"
-        $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_RPM_preProject.bedgraph"
-        prepWigAndProject $NAME_MAP_FLAG"_RPM" $NAME_MAP_FLAG"_RPM_preProject.bedgraph" " unstranded RPM"
-      fi
+    else #unstranded RPM
+      printProgress "[projectAllelic unstranded RPM] Converting $FLAG_BAM to bedGraph"
+      $BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_RPM_preProject.bedgraph"
+      prepWigAndProject $NAME_MAP_FLAG"_RPM" $NAME_MAP_FLAG"_RPM_preProject.bedgraph" " unstranded RPM"
     fi
   done
 
@@ -1119,16 +1119,14 @@ function prepWigAndProject () {
 
   printProgress "[projectAllelic$PROGRESS_APPEND] Converting $PRE_BEDGRAPH to WIG"
   local PRE_WIG=$FINAL_NAME"_preProject.wig"
-  awk '
-  #prepare track parameteres
+  awk ' 
   BEGIN {
-         print "track type=wiggle_0 name="'$FINAL_NAME'"\ndescription="'$PRE_BEDGRAPH'"\nvisibility=full"
+         print "track type=wiggle_0"
   }
-  #only process lines with 4 fields
   NF == 4 {
-           print "fixedStep chrom="$1" start="$2+1" step=1 span=1" 
-           for (i = 0; i < $3-$2; i++) {
-                 print $4
+           print "fixedStep chrom="$1" start="$2+1" step=1 span=1"
+           for(i = 0; i < $3-$2; i++) {
+                  print $4
           }
   }' $PRE_BEDGRAPH > $PRE_WIG
   gzip $PRE_WIG
@@ -1137,7 +1135,7 @@ function prepWigAndProject () {
   local PROJECTED_BEDGRAPH=$FINAL_NAME".bedgraph" #output bedgraph with reference genome coordinates
   if [[ $PRE_WIG == *$HAPLO_1* ]]; then
     $ALEA project --input-wig=$PRE_WIG".gz" --input-refmaps=$HAPLO_1_REFMAP --output-bedgraph=$PROJECTED_BEDGRAPH
-    elif [[ $PRE_WIG == *$HAPLO_2* ]]; then
+  elif [[ $PRE_WIG == *$HAPLO_2* ]]; then
     $ALEA project --input-wig=$PRE_WIG".gz" --input-refmaps=$HAPLO_2_REFMAP --output-bedgraph=$PROJECTED_BEDGRAPH
   fi
 
@@ -1167,6 +1165,7 @@ function masterTrackHub () {
     if [[ $BIN_SIZE != 1 ]] ; then
 		  FILE_NAME=$FILE_NAME"_b"$BIN_SIZE
 	  fi
+	  
 	  if [[ $SMOOTH_WIN != 0 ]] ; then
 		  FILE_NAME=$FILE_NAME"_s"$SMOOTH_WIN
 	  fi
@@ -1175,7 +1174,6 @@ function masterTrackHub () {
 
     if [[ $FOLDER_NAME != $PRINTED_DIR ]] ; then # Create supertrack for housing associated tracks
 		  printf "t rack $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \n\n" | tee -a $TRACKDB 
-      # %s inteprets arguments as a string (here we are basically inserting $FOLDER_NAME into the file)
 		  PRINTED_DIR=$FOLDER_NAME
 	  fi
 
@@ -1187,14 +1185,15 @@ function masterTrackHub () {
 	  fi
 	  echo "Data are Paired-end:" $PAIRED
 
-	  if [[ $FILE == *"RNA"* ]] ; then
+	  if [[ $FILE == *"RNA"* ]]; then
 		  generateRNATrack
-	  elif [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"PBAT"* ]] ; then
+	  elif [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"PBAT"* ]]; then
       generateBSTrack
 	  else #ChIPseq - not stranded
 		  generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
 		  printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
 	  fi
+	  
   done
   rm Actb.bed
 }
@@ -1207,6 +1206,7 @@ function generateRNATrack () {
 	  echo "Extracting reads over Actb..."
 	  $SAMTOOLS view -L Actb.bed $FOLDER_FILE > Actb.sam
   fi
+  
   STRANDED=$(awk 'BEGIN{PLUS=0; MINUS=0} {
 	  if( and($2,16) == 16) {
 				  MINUS++;
@@ -1281,18 +1281,21 @@ function generateBSTrack () {
   #TODO Optional: keep more information? Lots of stuff being discarded
 }
 
-function generateBigwigsUnstranded () { #$1=Name of filtered .bam file $2=Final name
+#$1=Name of filtered .bam file $2=Final name
+function generateBigwigsUnstranded () {
 	echo "Generating bigwig files..."
 	$SAMTOOLS index $1
 	$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $1 --outFileName $TRACK_FOLDER"$2.bw"
 }
 
-function printTrackHubUnstranded () { #$1=Supertrack name $2=Track name
+#$1=Supertrack name $2=Track name
+function printTrackHubUnstranded () { 
 	printf "\ttrack %s\n\tparent %s\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tbigDataUrl %s\n\tcolor 200,50,0\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tautoScale on\n\talwaysZero on\n\n" $2 $1 $2 $2 $2".bw" | tee -a $TRACKDB
 }
 
-function printTrackHubStranded () { #Takes in supertrack name then track name
+#Takes in supertrack name then track name
+function printTrackHubStranded () {
 	printf "\ttrack %s\n\tparent %s\n\tcontainer multiWig\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tconfigurable on\n\tautoScale on\n\talwaysZero on\n\taggregate transparentOverlay\n\tshowSubtrackColorOnUi on\n\tpriority 1.0\n\n" $2 $1 $2 $2 | tee -a $TRACKDB
 	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_pos" $2 $2"_pos" $2"_pos" $2"_pos.bw" | tee -a $TRACKDB
 	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" | tee -a $TRACKDB
-}
+	}
