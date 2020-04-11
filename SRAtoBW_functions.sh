@@ -199,7 +199,7 @@ function parseOptions () {
 
 function setUp () { #set up log file for parallel runs
   if [[ $SEP_PARA == false ]]; then 
-    LOG_FILE=$SEARCH_KEY"_"$(date '+%y-%m-%d')"_log.txt"
+    LOG_FILE=$CURRENT_DIRECTORY/$SEARCH_KEY"_"$(date '+%y-%m-%d')"_log.txt"
     checkDependencies
     printProgress "[setUp] Script started at [$(date)]"
     printProgress "[setUp] Search key for the set: $SEARCH_KEY"
@@ -817,11 +817,11 @@ function collapseReplicates () {
 	printProgress "[collapseReplicates] Started at [$(date)]"
 	
 	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
-		if [[ $FILE == *_[Rr]ep* ]] ; then 
+		if [[ $FILE == *_[Rr]ep* ]]; then 
 		  MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam}
-			if [[ $CURRENT != ${FILE//_[Rr]ep*.bam/}*.bam ]] ; then #
+			if [[ $CURRENT != ${FILE//_[Rr]ep*.bam/}*.bam ]]; then 
 				CURRENT=$FILE
-				printProgress "[collapseReplicates] Merging ${FILE//_[Rr]ep*.bam}*.bam"
+				printProgress "[collapseReplicates] Merging to $MERGED_BAM"
 				$SAMTOOLS merge -@ $RUN_THREAD $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
 				
         if [[ $KEEP_REPLICATES == false ]]; then
@@ -830,13 +830,13 @@ function collapseReplicates () {
         fi
 
         printProgress "[collapseReplicates] Indexing BAM file..."
-        $SAMTOOLS index ${MERGED_BAM//.bam/}* #index merged & replicates (if available)
+        $SAMTOOLS index ${MERGED_BAM//.bam/}*.bam #index merged & replicates (if available)
 
         if [[ $KEEP_REPLICATES ]]; then
 				  local REP_DIR=$(dirname $FILE)/"Reps" 
 				  mkdir -p $REP_DIR
-				  printProgress "[collapseReplicates] Moving all replicates into $REP_DIR..."
-				  mv ${MERGED_BAM//.bam/)*_[Rr]ep* $REP_DIR
+				  printProgress "[collapseReplicates] Moving all replicates into $REP_DIR"
+				  mv ${MERGED_BAM//.bam/}*_[Rr]ep* $REP_DIR
         fi
 			fi
 			
@@ -848,12 +848,12 @@ function collapseReplicates () {
 		fi
 
     printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
-    $SAMTOOLS flagstat $MERGED_BAM #TODO: DO we need the flagStats?
+    $SAMTOOLS flagstat $MERGED_BAM
 		
 	done
 
   printProgress "[collapseReplicates] All replicates for $SEARCH_KEY has been combined at [$(date)]"
-	
+
   cd $CURRENT_DIRECTORY
 }
 
