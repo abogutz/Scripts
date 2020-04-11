@@ -1019,19 +1019,20 @@ function unpackAllelic () { #working on bam that has already aligned to the pseu
     NAME=${NAME_HAPLO//_raw.bam/} #will include _rep if applicable
     FILE_RAW_BAM=$NAME"_raw.bam"
 
-    printProgress "[unpackAlleleic $HAPLO] Obtaining haplotype-specific header..."
-    $SAMTOOLS view -H $TOT_RAW_BAM \ 
-    | awk '($0 ~ "'$HAPLO'") {print $0}' \ #take lines that include the haplotype name (haplotype_specific chrom & commands)
+    printProgress "[unpackAllelic $HAPLO] Obtaining haplotype-specific header..."
+    #take lines that include the haplotype name - haplotype_specific chrom & commands
+    $SAMTOOLS view -H $TOT_RAW_BAM 
+    | awk '( $0 ~ "'$HAPLO'" ) {print $0}' \
     | sed 's/'$HAPLO'_chr/chr/g' > $FILE_RAW_BAM
 
     # get UNIQUELY ALIGNED READS, separate into two files, only keep reads where their mate also maps to the same chromo of the same haplotype
     # uniquely aligned defined by MIN_MAPQ
-    printProgress "[unpackAlleleic $HAPLO] Obtaining haplotype-specific reads with MAPQ >= $MIN_MAPQ"
+    printProgress "[unpackAllelic $HAPLO] Obtaining haplotype-specific reads with MAPQ >= $MIN_MAPQ"
     $SAMTOOLS view $TOT_RAW_BAM -q $MIN_MAPQ \
-    | awk '(($3 ~ "'$HAPLO'")&&($7 ~ "'$HAPLO'" || $7 == "*" || $7 == "=")) {print $0}' \
+    | awk '(( $3 ~ "'$HAPLO'" ) && ( $7 ~ "'$HAPLO'" || $7 == "*" || $7 == "=" )) {print $0}' \
     | sed 's/'$HAPLO'_chr/chr/g' >> $FILE_RAW_BAM
 
-    printProgress "[unpackAlleleic $HAPLO] Finished unpacking $TOT_RAW_BAM for $HAPLO -> $FILE_RAW_BAM"
+    printProgress "[unpackAllelic $HAPLO] Finished unpacking $TOT_RAW_BAM for $HAPLO -> $FILE_RAW_BAM"
     
     refineBAM
 #    cat $FILE"_markDupeMetrics.txt" >> $SEARCH_KEY"_alignLog.txt"
@@ -1049,8 +1050,8 @@ function projectAllelic () {
 
     printProgress "[projectAllelic] Started at [$(date)]"
     
-    for FILE_BAM in $CURRENT_DIRECTORY/$BAM_FOLDER_NAME/*".bam"
-      if [[ $FILE_BAM == *$HAPLO_1* || $FILE_BAM == *$HAPLO_2* ]] #only projecting bams that were aligned allele specifically
+    for FILE_BAM in $CURRENT_DIRECTORY/$BAM_FOLDER_NAME/*".bam"; do
+      if [[ $FILE_BAM == *$HAPLO_1* || $FILE_BAM == *$HAPLO_2* ]]; then #only projecting bams that were aligned allele specifically
         printProgress "[projectAllelic] Removing duplicates from $FILE_BAM with F=$FLAG"
         local NAME_MAP_FLAG=${FILE_BAM//.bam/}"_F"$FLAG
         FLAG_BAM=$NAME_MAP_FLAG".bam"
@@ -1199,14 +1200,14 @@ function masterTrackHub () {
 
 function generateRNATrack () {
   if [ $PAIRED = true ] ; then
-			  echo "Extracting F reads over Actb..."
-			  $SAMTOOLS view -L Actb.bed -f 64 $FOLDER_FILE > Actb.sam
-		  else
-			  echo "Extracting reads over Actb..."
-			  $SAMTOOLS view -L Actb.bed $FOLDER_FILE > Actb.sam
-		  fi
-		  STRANDED=`awk 'BEGIN{PLUS=0; MINUS=0} {
-			  if( and($2,16) == 16) {
+	  echo "Extracting F reads over Actb..."
+	  $SAMTOOLS view -L Actb.bed -f 64 $FOLDER_FILE > Actb.sam
+  else
+	  echo "Extracting reads over Actb..."
+	  $SAMTOOLS view -L Actb.bed $FOLDER_FILE > Actb.sam
+  fi
+  STRANDED=`awk 'BEGIN{PLUS=0; MINUS=0} {
+	  if( and($2,16) == 16) {
 				  MINUS++;
 			  } else {
 				  PLUS++;
@@ -1222,63 +1223,62 @@ function generateRNATrack () {
 				  }
 			  }
 		  }' Actb.sam`
-		  rm Actb.sam
-		  echo "Data are" $STRANDED
-		  if [[ $STRANDED == "Unstranded" ]] ; then
-			  generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
-			  printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
-		  else
-			  FILE_BIGWIG_POS=$TRACK_FOLDER"$FILE_NAME""_pos.bw"
-			  FILE_BIGWIG_NEG=$TRACK_FOLDER"$FILE_NAME""_neg.bw"
-			  FILE_BIGWIG_TEMP=$TEMP_DIR"/temp.bw"
-			  FILE_BEDGRAPH_TEMP=$TEMP_DIR"/temp.bedgraph"
-			  FILE_BEDGRAPH_TEMP2=$TEMP_DIR"/temp2.bedgraph"
-			  $BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand forward --outFileName $FILE_BIGWIG_POS
-			  $BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand reverse --outFileName $FILE_BIGWIG_NEG
-			  if [[ $STRANDED == "Opposite-Strand" ]] ; then
-				  mv $FILE_BIGWIG_NEG $FILE_BIGWIG_TEMP
-				  mv $FILE_BIGWIG_POS $FILE_BIGWIG_NEG
-				  mv $FILE_BIGWIG_TEMP $FILE_BIGWIG_POS
-			  fi
-			  bigWigToBedGraph $FILE_BIGWIG_NEG $FILE_BEDGRAPH_TEMP
-			  awk -F "\t" 'BEGIN {OFS="\t" } {
-				  $4 = 0 - $4;
-				  print $1, $2, $3, $4;
-			  }' $FILE_BEDGRAPH_TEMP > $FILE_BEDGRAPH_TEMP2
-			  mv $FILE_BEDGRAPH_TEMP2 $FILE_BEDGRAPH_TEMP
-			  $BEDGRAPHTOBW $FILE_BEDGRAPH_TEMP $CHROM_SIZES $FILE_BIGWIG_NEG
-			  rm $FILE_BEDGRAPH_TEMP
-			  printTrackHubStranded $FOLDER_NAME $FILE_NAME
-		  fi
+  rm Actb.sam
+  echo "Data are" $STRANDED
+
+  if [[ $STRANDED == "Unstranded" ]] ; then
+	  generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
+	  printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
+  else
+	  FILE_BIGWIG_POS=$TRACK_FOLDER"$FILE_NAME""_pos.bw"
+	  FILE_BIGWIG_NEG=$TRACK_FOLDER"$FILE_NAME""_neg.bw"
+	  FILE_BIGWIG_TEMP=$TEMP_DIR"/temp.bw"
+	  FILE_BEDGRAPH_TEMP=$TEMP_DIR"/temp.bedgraph"
+	  FILE_BEDGRAPH_TEMP2=$TEMP_DIR"/temp2.bedgraph"
+	  $BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand forward --outFileName $FILE_BIGWIG_POS
+	  $BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand reverse --outFileName $FILE_BIGWIG_NEG
+	  if [[ $STRANDED == "Opposite-Strand" ]] ; then
+		  mv $FILE_BIGWIG_NEG $FILE_BIGWIG_TEMP
+		  mv $FILE_BIGWIG_POS $FILE_BIGWIG_NEG
+		  mv $FILE_BIGWIG_TEMP $FILE_BIGWIG_POS
+	  fi
+	  bigWigToBedGraph $FILE_BIGWIG_NEG $FILE_BEDGRAPH_TEMP
+	  awk -F "\t" 'BEGIN {OFS="\t" } {
+		  $4 = 0 - $4;
+		  print $1, $2, $3, $4;
+	  }' $FILE_BEDGRAPH_TEMP > $FILE_BEDGRAPH_TEMP2
+	  mv $FILE_BEDGRAPH_TEMP2 $FILE_BEDGRAPH_TEMP
+	  $BEDGRAPHTOBW $FILE_BEDGRAPH_TEMP $CHROM_SIZES $FILE_BIGWIG_NEG
+	  rm $FILE_BEDGRAPH_TEMP
+	  printTrackHubStranded $FOLDER_NAME $FILE_NAME
+  fi
 }
 
 function generateBSTrack () {
-
-  #		FILE_BEDGRAPH=$TEMP_DIR/$FILE_NAME".bedGraph"
-		  FILE_TEMP_1=$TEMP_DIR"/temp.bam"
-		  TEMP_BEDGRAPH=${FILE_TEMP_1//.bam/.bedGraph}
-  #		FILE_TEMP_2=$TEMP_DIR"/temp2.bam"
-		  echo "Filtering" $FILE "for mapping quality..."
-		  $SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FOLDER_FILE
-		  $BISMARK_METH_EXTRACT --gzip --multicore $RUN_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
-  #		mv temp2.bedGraph.gz $FILE_BEDGRAPH.gz # TODO probably not correct
-		  gunzip $TEMP_BEDGRAPH.gz
-  #		grep ^[^\*] $FILE_BEDGRAPH > $TEMP_DIR/temp.bedgraph
-  #		mv $TEMP_BEDGRAPH $FILE_BEDGRAPH
-  #		sort -k1,1 -k2,2n $TEMP_DIR/temp.bedgraph > $FILE_BEDGRAPH
-  #		rm $TEMP_DIR/temp.bedgraph
-		  $BEDGRAPHTOBW $TEMP_BEDGRAPH $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME.bw
-		  rm $TEMP_BEDGRAPH
-		  printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
-		  rm $FILE_TEMP_1
-		  rm $TEMP_DIR/CHG*
-		  rm $TEMP_DIR/CHH*
-		  rm $TEMP_DIR/CpG*
-		  rm $TEMP_DIR/$FILE_NAME.*
-  #		rm $TEMP_DIR/*.bai
-		  #TODO Optional: keep more information? Lots of stuff being discarded
+# FILE_BEDGRAPH=$TEMP_DIR/$FILE_NAME".bedGraph"
+	FILE_TEMP_1=$TEMP_DIR"/temp.bam"
+	TEMP_BEDGRAPH=${FILE_TEMP_1//.bam/.bedGraph}
+#		FILE_TEMP_2=$TEMP_DIR"/temp2.bam"
+  echo "Filtering" $FILE "for mapping quality..."
+  $SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FOLDER_FILE
+  $BISMARK_METH_EXTRACT --gzip --multicore $RUN_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
+#		mv temp2.bedGraph.gz $FILE_BEDGRAPH.gz # TODO probably not correct
+  gunzip $TEMP_BEDGRAPH.gz
+#		grep ^[^\*] $FILE_BEDGRAPH > $TEMP_DIR/temp.bedgraph
+#		mv $TEMP_BEDGRAPH $FILE_BEDGRAPH
+#		sort -k1,1 -k2,2n $TEMP_DIR/temp.bedgraph > $FILE_BEDGRAPH
+#		rm $TEMP_DIR/temp.bedgraph
+  $BEDGRAPHTOBW $TEMP_BEDGRAPH $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME.bw
+  rm $TEMP_BEDGRAPH
+  printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
+  rm $FILE_TEMP_1
+  rm $TEMP_DIR/CHG*
+  rm $TEMP_DIR/CHH*
+  rm $TEMP_DIR/CpG*
+  rm $TEMP_DIR/$FILE_NAME.*
+#		rm $TEMP_DIR/*.bai
+  #TODO Optional: keep more information? Lots of stuff being discarded
 }
-
 
 function generateBigwigsUnstranded () { #$1=Name of filtered .bam file $2=Final name
 	echo "Generating bigwig files..."
@@ -1295,4 +1295,3 @@ function printTrackHubStranded () { #Takes in supertrack name then track name
 	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_pos" $2 $2"_pos" $2"_pos" $2"_pos.bw" | tee -a $TRACKDB
 	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" | tee -a $TRACKDB
 }
-
