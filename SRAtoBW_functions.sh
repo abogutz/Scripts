@@ -214,7 +214,7 @@ function printProgress () {
 }
 
 function checkFileExists () {
-  if [ ! -f $1 ]; then
+  if [[ ! -f $1 ]]; then
     echo "ERROR:\tFile $1 does not exist"
     exit 1
   fi
@@ -235,7 +235,7 @@ function setGenome () {
 			GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
 			BISMARK_GENOME_DIR=$GENOME_DIR
 			BOWTIE_GENOME_DIR=$GENOME_DIR
-			if [ $FASTQ_ONLY = false ]; then
+			if [[ $FASTQ_ONLY == false ]]; then
 				printf "chr5\t143666090\t143666091" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
 				mkdir -p $TRACK_FOLDER
@@ -245,7 +245,7 @@ function setGenome () {
 			;;
 		"mm10")
 		  GENOME_DIR=$GENOME_DIR/$MOUSE/$1/ 
-			if [ $FASTQ_ONLY = false ] ; then
+			if [[ $FASTQ_ONLY == false ]] ; then
 				printf "chr5\t142904365\t142904366" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
 				mkdir -p $TRACK_FOLDER
@@ -255,7 +255,7 @@ function setGenome () {
 			;;
 		"rn6")
 		  GENOME_DIR=$GENOME_DIR/$RAT/$1/
-			if [ $FASTQ_ONLY = false ] ; then
+			if [[ $FASTQ_ONLY == false ]] ; then
 				printf "chr12\t13718023\t13718024" > Actb.bed
         TRACK_FOLDER=$TRACK_HUB_DIR/$1
 				mkdir -p $TRACK_FOLDER
@@ -265,7 +265,7 @@ function setGenome () {
 			;;
 		"rn5")
 		  GENOME_DIR=$GENOME_DIR/$RAT/$1/
-			if [ $FASTQ_ONLY = false ] ; then
+			if [[ $FASTQ_ONLY == false ]] ; then
 				printf "chr12\t15748011\t15748012" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
 				mkdir -p $TRACK_FOLDER
@@ -275,7 +275,7 @@ function setGenome () {
 			;;
     "hg19")
       GENOME_DIR=$GENOME_DIR/"Hsa"/$1/
-			if [ $FASTQ_ONLY = false ] ; then
+			if [[ $FASTQ_ONLY == false ]] ; then
 				printf "chr7\t5527531\t5527532" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
 				mkdir -p $TRACK_FOLDER
@@ -285,7 +285,7 @@ function setGenome () {
 			;;
 		"oryCun2")
 		  GENOME_DIR=$GENOME_DIR/"oryCun"/$1/
-			if [ $FASTQ_ONLY = false ] ; then
+			if [[ $FASTQ_ONLY == false ]] ; then
 				printf "chr7\t87232876\t87232877" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
 				mkdir -p $TRACK_FOLDER
@@ -295,7 +295,7 @@ function setGenome () {
 			;;
 		"mesAur1")
 		  GENOME_DIR=$GENOME_DIR/"mesAur"/$1/
-			if [ $FASTQ_ONLY = false ] ; then
+			if [[ $FASTQ_ONLY == false ]] ; then
 				printf "KB708222.1\t2764075\t2764076" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
 				mkdir -p $TRACK_FOLDER
@@ -543,7 +543,7 @@ function extractFastq () {
 	  fi
  
 	else #Single-End Reads
-    COUNT=`ls -1 $SEARCH_DL*.fastq.gz | wc -l`
+    COUNT=$(ls -1 $SEARCH_DL*.fastq.gz | wc -l)
     if [[ $COUNT > 1 ]] ; then # If only single file, move, don't copy
       cat $SEARCH_DL*.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
     else
@@ -1200,14 +1200,14 @@ function masterTrackHub () {
 }
 
 function generateRNATrack () {
-  if [ $PAIRED = true ] ; then
+  if [[ $PAIRED == true ]] ; then
 	  echo "Extracting F reads over Actb..."
 	  $SAMTOOLS view -L Actb.bed -f 64 $FOLDER_FILE > Actb.sam
   else
 	  echo "Extracting reads over Actb..."
 	  $SAMTOOLS view -L Actb.bed $FOLDER_FILE > Actb.sam
   fi
-  STRANDED=`awk 'BEGIN{PLUS=0; MINUS=0} {
+  STRANDED=$(awk 'BEGIN{PLUS=0; MINUS=0} {
 	  if( and($2,16) == 16) {
 				  MINUS++;
 			  } else {
@@ -1223,7 +1223,7 @@ function generateRNATrack () {
 					  print "Unstranded";
 				  }
 			  }
-		  }' Actb.sam`
+		  }' Actb.sam)
   rm Actb.sam
   echo "Data are" $STRANDED
 
@@ -1284,7 +1284,7 @@ function generateBSTrack () {
 function generateBigwigsUnstranded () { #$1=Name of filtered .bam file $2=Final name
 	echo "Generating bigwig files..."
 	$SAMTOOLS index $1
-	$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $1 --outFileName "$TRACK_FOLDER$2".bw
+	$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $1 --outFileName $TRACK_FOLDER"$2.bw"
 }
 
 function printTrackHubUnstranded () { #$1=Supertrack name $2=Track name
