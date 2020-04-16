@@ -27,11 +27,11 @@ FASTQ_INPUT=false
 FASTQ_ONLY=false
 KEEP_FASTQ=false
 KEEP_REPLICATES=false
+LOCAL_RUN=false
 SEP_PARA=false
 STRANDED_ALLELIC=false
 TRIM_READ=false
 USE_BOWTIE=false
-USE_SERVER=false
 
 CODE_ARRAY=""
 BIN_SIZE=1
@@ -44,7 +44,7 @@ SMOOTH_WIN=0
 DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$TRIMMOMATIC" $STAR $BISMARK $BOWTIE2 $BWA $SAMTOOLS "$PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
-OPTIONS="hi:ab:B:d:Df:Fg:km:M:n:N:ors:St:Tux:X"
+OPTIONS="hi:ab:B:d:Df:Fg:kLm:M:n:N:ors:t:Tux:X"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
@@ -64,13 +64,13 @@ HELP_FULL="\n$HELP\n
 -F\tOnly output .fastq files.\n\t
 -g\tGenome build for alignment. Allowable: mm9, mm10, rn5, rn6,\n\t\toryCun2, mesAur1, or hg19. Default=mm10\n\t
 -k\tKeep .fastq files when done.\n\t
+-L\tRunning script on a local computer rather than a server.\n\t
 -m\tMemory to give each thread (Format=XG/M).\n\t
 -M\tMinimum mapping quality for bigwig generation. Default=5\n\t
 -n\tBin size for bigwig generation. Larger bins to smooth noisy\n\t\tdata. Default=1\n\t
 -N\tNormalization method for bigwigs. Accepted: CPM, RPKM\n\t\t(Default=CPM)\n\t
 -r\tKeep replicates after collapsing. Default=false.\n\t
 -s\tObtained stranded RPM tracks for allele-specific runs.\n\t\tDefault=false\n\t
--S\tUse of server to submit parallel jobs. Default=FALSE\n\t
 -t\tNumber of Threads to use. Default=6 (Check in config file)\n\t
 -T\tTrim .fastq files after download.\n\t
 -u\tChanging ChIPseq aligner to bowtie2. Default=BWA\n\t
@@ -141,6 +141,9 @@ function parseOptions () {
       k) #keep fastq files after alignment
         KEEP_FASTQ=true
         ;;
+      L)
+        LOCAL_RUN=true
+        ;;
       m)
         THREAD_MEM=${OPTARG}
         ;;
@@ -162,9 +165,6 @@ function parseOptions () {
         ;;
       s)
         STRANDED_ALLELIC=true
-        ;;
-      S)
-        USE_SERVER=true
         ;;
       t)
         RUN_THREAD=${OPTARG}
@@ -340,14 +340,14 @@ function parallelRun () {
           declare -a SUB_ARRAY=$(grep -e $CURRENT_SET $INPUT_FILE | cut -f1)
           echo "calling "$(basename $SHELL_SCRIPT) "on" $CURRENT_SET
           
-          if $USE_SERVER; then
+          if $LOCAL_RUN; then
+            $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY & 
+            wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
+          else
             echo "Submitting on server"
             DATE=$(date '+%y-%m-%d')
             $SERVER_SUBMIT "MasterDAT_"$DATE"_"$CURRENT_SET $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY
             sleep 30 #pause for 30 secs before running next code b/c fetching data takes some time
-          else
-            $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY & 
-            wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
           fi
 
         fi
@@ -356,14 +356,14 @@ function parallelRun () {
         declare -a SUB_ARRAY=$SRACODE
         echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
 
-        if $USE_SERVER ; then
+        if $LOCAL_RUN ; then
+          $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+          wait $!
+        else
           echo "Submitting on server"
           DATE=$(date '+%y-%m-%d')
           $SERVER_SUBMIT "MasterDAT_"$DATE"_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
           sleep 30
-        else
-          $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
-          wait $!
         fi
 
       fi
