@@ -1,7 +1,7 @@
 #! /bin/bash
 #$ -cwd
 #$ -pe ncpus 4
-#$ -l h_vmem=12G
+#$ -l h_vmem=20G
 #$ -m e
 #$ -M tiffyyleung@gmail.com
 
@@ -10,25 +10,16 @@
 ###From tab-delimited file with SRACODE & NAME of dataset
 ###All the data are first downloaded, then trimmed (optional), and aligned 
 
-#############################################
-########## BEFORE USING THE SCRIPT ##########
-#############################################
-
+#TODO: Provide full path to where Github Scripts directory is located 
+#Ensure functions, MasterDAT.sh and config files are within same directory
 SCRIPTS_DIR=/brcwork/lorincz_lab/tleung/Scripts
 
-#TODO: alter any system specific variables and tools path through config file
-#TODO:Ensure functions, MasterDAT.sh and config files are within same directory (sourcing will not work otherwise)
-#if [[ -z $FUNCTIONS_DIR ]]; then #if want to use functions by themselves
-#  pushd $(dirname $0) > /dev/null
-#  FUNCTIONS_DIR=$(pwd -P)
-#  popd > /dev/null
-#fi
-
 #############################################
 
-SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0)
-source $SCRIPTS_DIR/BRC.config
+#TODO: Ensure it's the correct config file for the server
+source $SCRIPTS_DIR/Graham.config
 source $SCRIPTS_DIR/SRAtoBW_functions.sh
+SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0)
 
 ############### PIPELINE ###############
 
