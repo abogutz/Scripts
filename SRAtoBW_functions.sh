@@ -4,10 +4,9 @@
 
 ##System Specific Configuration
 
-#TODO: alter any system specific variables and tools path through config file
-#Ensure function and config files are within same directory (sourcing will not work otherwise)
-
-if [[ -z $SCRIPTS_DIR ]]; then #if want to use functions by themselves, can typically ignore
+#TODO: Only if you ever plan on using these functions directly in the command line (otherwise ignore)
+#Ensure correct config file if using
+if [[ -z $SCRIPTS_DIR ]]; then
   pushd $(dirname $0) > /dev/null
   SCRIPTS_DIR=$(pwd -P)
   popd > /dev/null
@@ -325,6 +324,7 @@ function setGenome () {
 ### Create subset of SRACODE array to be used in parallel running
 function parallelRun () {
   if $SEP_PARA; then
+    echo -e "Separating input file into subsets for parallel runs..."
 
     INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
     createCodeArray
@@ -774,11 +774,11 @@ function alignBowtie2 () {
 
   if $PAIRED_END; then
     printProgress "[masterAlign Bowtie2] Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
-    $BOWTIE2 -x $BOWTIE2_INDEXES -p $RUN_THREAD -1 $FILE_FASTQ1 -2 $FILE_FASTQ2 -S $FILE_SAM
+    $BOWTIE2 -x $BOWTIE2_INDEXES --local -p $RUN_THREAD -1 $FILE_FASTQ1 -2 $FILE_FASTQ2 -S $FILE_SAM
 
   else #Single-End
     printProgress "[masterAlign Bowtie2] Aligning $NAME.fastq to genome..."
-    $BOWTIE2 -x $BOWTIE2_INDEXES -p $RUN_THREAD -U $FILE_FASTQ -S $FILE_SAM
+    $BOWTIE2 -x $BOWTIE2_INDEXES --local -p $RUN_THREAD -U $FILE_FASTQ -S $FILE_SAM
   fi
 
   printProgress "[masterAlign Bowtie2] Converting sam file to .bam file..."
@@ -798,7 +798,7 @@ function refineBam () {
   $PICARD CleanSam I=$FILE_RAW_BAM O=$FILE_CLEANED_BAM
 
   printProgress "[refineBAM] Sorting by coordinates..."
-  $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE_SORTED_BAM $FILE_CLEANED_BAM
+  $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE_SORTED_BAM -T $NAME $FILE_CLEANED_BAM
     
   printProgress "[refineBAM] Marking duplicates..." #not removing the duplicates
   $PICARD MarkDuplicates I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt"
@@ -832,7 +832,7 @@ function collapseReplicates () {
         printProgress "[collapseReplicates] Indexing BAM file..."
         $SAMTOOLS index ${MERGED_BAM//.bam/}*.bam #index merged & replicates (if available)
 
-        if [[ $KEEP_REPLICATES ]]; then
+        if $KEEP_REPLICATES; then
 				  local REP_DIR=$(dirname $FILE)/"Reps" 
 				  mkdir -p $REP_DIR
 				  printProgress "[collapseReplicates] Moving all replicates into $REP_DIR"
@@ -847,8 +847,8 @@ function collapseReplicates () {
       $SAMTOOLS index $MERGED_BAM
 		fi
 
-    printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
-    $SAMTOOLS flagstat $MERGED_BAM
+#    printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
+#    $SAMTOOLS flagstat $MERGED_BAM
 		
 	done
 
@@ -920,8 +920,8 @@ function obtainFastqFromBAM () {
 #       ALLELE-SPECIFIC FUNCTIONS      #
 ########################################
 
-function checkPseudogenome() {
-  if [[ $ALLELE_SPECIFIC && $SEP_PARA ]]; then
+function checkPseudogenome () {
+  if $ALLELE_SPECIFIC && $SEP_PARA ; then
 
     cd $TEMP_DIR
     
@@ -933,7 +933,7 @@ function checkPseudogenome() {
       HAPLO_2=${CROSS##*_}
 
       if [[ -z $HAPLO_1 || -z $HAPLO_2 ]]; then
-        echo -e "ERROR:\t One of your samples only have 1 haplotype entered. \nPlease ensure both haplotypes are entered for allele specific pipeline" \
+        echo -e "ERROR:\t One of your samples only have 1 haplotype entered. \nPlease ensure to enter both haplotypes of allele pipeline" \
         | tee -a 
         EXIT_SCRIPT=true
         continue #continue to next iteration of cross
@@ -1173,7 +1173,7 @@ function masterTrackHub () {
     FOLDER_NAME=${FOLDER_FILE%%\/*} #removing longest text of the matching pattern (after "/" in this case)
 
     if [[ $FOLDER_NAME != $PRINTED_DIR ]] ; then # Create supertrack for housing associated tracks
-		  printf "t rack $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \n\n" | tee -a $TRACKDB 
+		  printf "track $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \n\n" | tee -a $TRACKDB 
 		  PRINTED_DIR=$FOLDER_NAME
 	  fi
 
