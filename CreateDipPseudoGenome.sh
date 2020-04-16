@@ -6,20 +6,18 @@
 #$ -M 
 
 pushd $(dirname $0) > /dev/null
-$FUNCTIONS_DIR=$(pwd -P)
+$SCRIPTS_DIR=$(pwd -P)
 popd > /dev/null
 
-source $FUNCTIONS_DIR/BRC.config
+source $SCRIPTS_DIR/BRC.config
 
-RUN_THREAD=10
-GENOME_DIR=$GENOME_DIR/mm10/ #TODO: edit genome path if it's different from this
+#TODO: edit genome path with addition of the genome build 
+GENOME_DIR=$GENOME_DIR/mm10/
 DIPLOID_GENOME_DIR=$GENOME_DIR/diploid
 HAPLOID_GENOME_DIR=$GENOME_DIR/haploid
-
-
-OPTIONS="1:2:g:"
 STRAIN_LIST="129S1 B6NJ C57BL6J SvImJ"
 
+OPTIONS="1:2:g:"
 
 if ( ! getopts $OPTIONS opt); then
   echo -e "USAGE:\t $(basename $0) -1 <STRAIN_1> -2 <STRAIN_2>"
@@ -57,15 +55,15 @@ FAIL_STRAIN_2==true
 for strain in $STRAIN_LIST; do
   if [[ $FAIL_STRAIN_1 && $strain == $STRAIN_1 ]];
     FAIL_STRAIN_1=false
-    echo $STRAIN_1 "supported."
+    echo -e "$STRAIN_1 supported."
   elif [[ $FAIL_STRAIN_2 && $strain == $STRAIN_2 ]];
     FAIL_STRAIN_2=false
-    echo $STRAIN_2 "supported."
+    echo -e "$STRAIN_2 supported."
   fi
 done
 
 if [[ $FAIL_STRAIN_1 || $FAIL_STRAIN_2 ]]
-  echo -e "One of your strains is either misspelt or unsupported. \nIf unsupported, please contact..."
+  echo -e "At least one of your strains is not found. \nPlease double check spelling of the strains. \nIf the strain is not supported, please contact..."
   exit
 fi
 
@@ -80,9 +78,9 @@ done
 #Find the corresponding haploid fasta files
 for HAP in $HAPLOID_GENOME_DIR/*.fa; do
   if [[ $HAP == *$STRAIN_1*]]; then
-    HAP1_REFGENOME=$hap_genome
+    HAP1_REFGENOME=$HAP
   elif [[ $HAP == *$STRAIN_2* ]]; then
-    HAP2_REFGENOME=$hap_genome
+    HAP2_REFGENOME=$HAP
   fi
 done
 
@@ -93,10 +91,10 @@ mkdir -p $DIPLOID_GENOME_DIR/$DIP_NAME
 cat $HAP1_REFGENOME $HAP2_REFGENOME > $DIPLOID_GENOME_DIR/$DIP_NAME/$DIP_REFGENOME
 
 #Bowtie2 Indexing
-$BOWTIE2_DIR/bowtie2-build --threads $RUN_THREAD $DIPLOID_GENOME_DIR/$DIP_NAME/$DIP_REFGENOME $DIP_NAME
+$BOWTIE2"-build" --threads $RUN_THREAD $DIPLOID_GENOME_DIR/$DIP_NAME/$DIP_REFGENOME $DIP_NAME
 
 #Bismark Indexing
-$BISMARK_DIR/bismark_genome_preparation --path_to_aligner $BOWTIE2_DIR $DIPLOID_GENOME_DIR/$DIP_NAME/
+$BISMARK"_genome_preparation" --path_to_aligner $BOWTIE2 $DIPLOID_GENOME_DIR/$DIP_NAME/
 
 #STAR Indexing
 mkdir -p $DIPLOID_GENOME_DIR/$DIP_NAME/$DIP_NAME"-STAR"

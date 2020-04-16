@@ -23,14 +23,14 @@ function avgOverBed () {
   cd $CURRENT_DIRECTORY
 }
 
-### Using BAM files to obtain RPKM over bed features, list of BAM for $2
+### Using BAM files to obtain RPKM over bed features, list of BAM 
 function bam2rpkm () {
   BED=$1
   OUTFILE=$2
   TEMP_FILE="temp_"$(basename $OUTFILE)
   
   #check if output file exist, if not - set up with bed file with of chr, start, end (can be joined with names later in R)
-  if [ -f "$OUTFILE" ]; then
+  if [[ -f "$OUTFILE" ]]; then
     echo $OUTFILE "exists"
   else
     awk 'BEGIN {OFS="\t"; print "chr", "start", "end";} {print $1, $2, $3}' $BED > $OUTFILE
