@@ -1,7 +1,7 @@
 #! /bin/bash
 
 pushd $(dirname $0) > /dev/null
-source $(pwd -P)/Graham.config
+source $(pwd -P)/ComputeCanada.config
 popd > /dev/null
 
 CURRENT_DIRECTORY=$(pwd)

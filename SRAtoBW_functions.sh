@@ -1,20 +1,24 @@
 #! /bin/bash
 
-###List of functions that can be used in various pipelines for download, align and creating track hub
+#List of functions used in various pipelines for download, alignments and creating track hubs
 
-##System Specific Configuration
+# Pipelines that use these functions:
+# MasterDAT.sh
+# ...
+# ...
 
-#TODO: Only if you ever plan on using these functions directly in the command line (otherwise ignore)
+#Troubleshooting
+#Only change if you ever plan on using these functions directly in the command line (otherwise ignore)
+#NO user action required here
 #Ensure correct config file if using
 if [[ -z $SCRIPTS_DIR ]]; then
   pushd $(dirname $0) > /dev/null
   SCRIPTS_DIR=$(pwd -P)
   popd > /dev/null
-  source $SCRIPTS_DIR/BRC.config
+  source $SCRIPTS_DIR/ComputeCanada.config
 fi
 
-
-## Non System Specific Variables
+# Non-system specific variables
 CURRENT_DIRECTORY=$(pwd)
 FASTQ_DIRECTORY="./Fastq"
 TRACK_HUB_DIR="./Track_Hub"
@@ -31,11 +35,11 @@ LOCAL_RUN=false
 SEP_PARA=false
 STRANDED_ALLELIC=false
 TRIM_READ=false
-USE_BOWTIE=false
+USE_BOWTIE=false #default is bwa-mem
 
 CODE_ARRAY=""
 BIN_SIZE=1
-FLAG=1540 #read unmapped, read fails platform/vendor quality checks, read is PCR or optical duplicate 
+FLAG=1540 #read unmapped, read fails platform/vendor quality checks, read is PCR or optical duplicate
 GENOME_BUILD="mm10"
 MIN_MAPQ=5
 NORMALIZE="CPM"
@@ -60,7 +64,7 @@ HELP_FULL="\n$HELP\n
 -B\tBAM Input with realignment. Will extract reads from .bam files\n\t\tin listed directory and realign to genome of choice.\n\t
 -d\tTemporary directory. Useful for solid-state drives etc.\n\t\tPlease change the default using BRC.config.\n\t
 -D\tCheck Dependencies and exit.\n\t
--f\tInput .fastq files. Provide folder name in which fastq files\n\t\tare located (files must end in .fastq.gz).\n\t
+-f\tInput .fastq files. Provide folder name in which fastq files\n\t\tare located (files must end in .fastq.gz).\n\t\tData type must be included in name. Accepted: RNA, ChIP, BSSeq,\n\t\t PBAT, RRBS, ATAC, DNAse, HiC\n\t
 -F\tOnly output .fastq files.\n\t
 -g\tGenome build for alignment. Allowable: mm9, mm10, rn5, rn6,\n\t\toryCun2, mesAur1, or hg19. Default=mm10\n\t
 -k\tKeep .fastq files when done.\n\t
@@ -72,8 +76,9 @@ HELP_FULL="\n$HELP\n
 -r\tKeep replicates after collapsing. Default=false.\n\t
 -s\tObtained stranded RPM tracks for allele-specific runs.\n\t\tDefault=false\n\t
 -t\tNumber of Threads to use. Default=6 (Check in config file)\n\t
--T\tTrim .fastq files after download.\n\t
+-T\tTrim .fastq files using Trimmomatic.\n\t
 -u\tChanging ChIPseq aligner to bowtie2. Default=BWA\n\t
+-x\tPrefix of fastq.gz files (used with -f)\n\t
 -w\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t"
 
 
@@ -82,7 +87,7 @@ HELP_FULL="\n$HELP\n
 #               FUNCTIONS              #
 ########################################
 
-### Changing options/variables based on options passed from shell script
+### Change/parse options/variables based on user-input parameters passed from command-line
 function parseOptions () {
   if ( ! getopts $OPTIONS opt); then
     echo -e $HELP
@@ -120,7 +125,7 @@ function parseOptions () {
       D)
         DEPEND=1
         ;;
-      f) #use exisiting fastq files for downstream modules in pipeline (will skip download)
+      f) #use existing fastq files for downstream modules in pipeline (will skip download)
         FASTQ_INPUT=true
         if $FASTQ_ONLY ; then
           echo -e "ERROR:\tFiles already in Fastq format."
@@ -128,7 +133,7 @@ function parseOptions () {
         fi
         FASTQ_DIRECTORY=${OPTARG}
         ;;
-      F) #Stop pipeline after downloading
+      F) #stop pipeline after downloading
         FASTQ_ONLY=true
         if $BAM_INPUT ; then
           echo -e "ERROR:\tIncompatible options. Cannot generate .fastq files from .bam files."
@@ -169,7 +174,7 @@ function parseOptions () {
       t)
         RUN_THREAD=${OPTARG}
         ;;
-      T) #trimming fastq by default parameters
+      T) #trim fastq using TRIMMOMATIC and default parameters
         TRIM_READ=true
         ;;
       u)
@@ -178,7 +183,7 @@ function parseOptions () {
       w)
         SMOOTH_WIN=${OPTARG}
         ;;
-      x)
+      x) #used in conjuction with -f. Run pipeline only on files with prefix SEARCH_KEY
         SEP_PARA=false
         SEARCH_KEY=${OPTARG}
         ;;
@@ -191,13 +196,13 @@ function parseOptions () {
         ;;
     esac
   done
-  
+
   setGenome $GENOME_BUILD
-  
 }
 
-function setUp () { #set up log file for parallel runs
-  if [[ $SEP_PARA == false ]]; then 
+### Set up log file for parallel runs
+function setUp () {
+  if [[ $SEP_PARA == false ]]; then
     LOG_FILE=$CURRENT_DIRECTORY/$SEARCH_KEY"_"$(date '+%y-%m-%d')"_log.txt"
     checkDependencies
     printProgress "[setUp] Script started at [$(date)]"
@@ -224,9 +229,12 @@ function setGenome () {
 		mkdir -p $TRACK_HUB_DIR
 		printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./$TRACK_HUB_DIR/hub.txt
 	fi
-  
-  MOUSE="." #TODO
-  RAT="."   #CURRENTLY BRC LOCATION!
+
+### USER ACTION REQUIRED ###
+# Please specify the exact location of your existing reference genomes and their indices
+# Otherwise, ignore (right?)
+  MOUSE=""
+  RAT="."
 
   case $1 in
 		"mm9")
@@ -242,7 +250,7 @@ function setGenome () {
 			fi
 			;;
 		"mm10")
-		  GENOME_DIR=$GENOME_DIR/$MOUSE/$1/ 
+		  GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
 			if [[ $FASTQ_ONLY == false ]] ; then
 				printf "chr5\t142904365\t142904366" > Actb.bed
 				TRACK_FOLDER=$TRACK_HUB_DIR/$1
@@ -315,10 +323,9 @@ function setGenome () {
 
   DIPLOID_GENOME_DIR=$GENOME_DIR/diploid
   HAPLOID_GENOME_DIR=$GENOME_DIR/haploid
-  
-	checkFileExists $CHROM_SIZES
+
+  checkFileExists $CHROM_SIZES
   checkFileExists $GENOME_FILE
-  
 }
 
 ### Create subset of SRACODE array to be used in parallel running
@@ -329,19 +336,19 @@ function parallelRun () {
     INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
     createCodeArray
     CURRENT_SET=""
-  
+
     for code in $CODE_ARRAY; do
       SRACODE=$code
       NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-      if [[ $NAME == *_[Rr]ep* ]] ; then        
+      if [[ $NAME == *_[Rr]ep* ]] ; then
         if [[ $CURRENT_SET != ${NAME//_[Rr]ep*/}* ]]; then
           CURRENT_SET=${NAME//_[Rr]ep*/}
           declare -a SUB_ARRAY=$(grep -e $CURRENT_SET $INPUT_FILE | cut -f1)
           echo "calling "$(basename $SHELL_SCRIPT) "on" $CURRENT_SET
-          
+
           if $LOCAL_RUN; then
-            $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY & 
+            $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY &
             wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
           else
             echo "Submitting on server"
@@ -370,11 +377,10 @@ function parallelRun () {
     done
     exit #exit the script b/c don't want to run the rest of the code on every single SRACODE again
   fi
-
 }
 
 ### Downloading files specified from the tab-delimited file to fastq files
-### When calling function by itself $1=SRA input file
+### When calling function by itself, $1=SRA input file
 function masterDownload () {
   if $BAM_INPUT || $FASTQ_INPUT; then #if input is either BAM/FASTQ then no download is needed - exit masterDownload function
     return 0
@@ -387,16 +393,16 @@ function masterDownload () {
   fi
 
   INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
-  
-  if [[ -z $CODE_ARRAY ]]; then #this will basically only be used if the function was called by itself (may delete later)
+
+  if [[ -z $CODE_ARRAY ]]; then #this will basically only be used if the function was called by itself (may delete later) <-- Julien: keep it (what is F1?)!
     INPUT_FILE=$CURRENT_DIRECTORY/$F1
     createCodeArray
   fi
-  
-  cd $TEMP_DIR  
+
+  cd $TEMP_DIR
 
   printProgress "[masterDownload] Started at [$(date)]"
-    
+
   for code in $CODE_ARRAY; do
     downloadReads
     extractType
@@ -412,7 +418,7 @@ function masterDownload () {
     exit 0 #exit the whole script b/c only requires fastq files
   fi
 }
- 
+
 ### Create an array of SRACODE passed listed in the tab-delimited file
 function createCodeArray () {
   while read n; do #read command will read a line of and split them into words (2 words in files)
@@ -433,17 +439,17 @@ function downloadReads () {
   for DL in $($ESEARCH -db sra -query $SRACODE \
               | $EFETCH --format runinfo \
               | cut -d ',' -f 10 \
-              | grep https); do			
+              | grep https); do
     wget --no-check-certificate $DL -O $SEARCH_KEY"_"$(basename $DL) & #& this allow the command to run in parallel and in the background 
     DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
     ((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
   done
-		
+
   for pid in ${DL_PID_ARRAY[*]}
   do
     wait $pid #wait for all downloads to finish
   done
-  
+
   printProgress "[masterDownload] Finished $SRACODE -> $NAME reads download."
 }
 
@@ -457,7 +463,7 @@ function extractType() {
         | tail -n 2 \
         | head -n 1)
   printProgress "[masterDownload] Data type: $TYPE"
-  
+
   if [[ $TYPE == "ChIP-Seq" ]] && \
      [[ $NAME != *"ChIP"* ]]; then
      NAME="ChIPseq_"$NAME
@@ -505,10 +511,12 @@ function extractPaired () {
     PAIRED_END=true
   printProgress "[masterDownload] Data are paired-end."
   fi
-} 
+}
 
-### Extract fastq using fasterq-dump, compressed then concatenate fastq
-function extractFastq () { 
+
+### INDENTING PROBLEMS HERE###
+### Extract fastq using fasterq-dump, compress FASTQ then concatenate FASTQ from same samples
+function extractFastq () {
   COMPRESS_COUNTER=0
   COMPRESS_PID_ARRAY=""
 
@@ -520,12 +528,12 @@ function extractFastq () {
 	done
 
   printProgress "[masterDownload extractFastq] Compressing fastq files..." #simultaneously zip all the dump fastq files for that read
-  for DL_FASTQ in $SEARCH_DL*fastq; do 
-    gzip $DL_FASTQ & 
+  for DL_FASTQ in $SEARCH_DL*fastq; do
+    gzip $DL_FASTQ &
     COMPRESS_PID_ARRAY[$COMPRESS_COUNTER]=$!
     ((COMPRESS_COUNTER++))
   done
-  
+
   for gzipid in ${COMPRESS_PID_ARRAY[*]}; do
     wait $gzipid #wait for all gzip to finish
   done
@@ -533,20 +541,34 @@ function extractFastq () {
   printProgress "[masterDownload extractFastq] Concatenating fastq.gz files..."
   if $PAIRED_END; then
 	  COUNT=$(ls -1 $SEARCH_DL*_1.fastq.gz | wc -l)
-  	if [[ $COUNT > 1 ]] ; then 
+  	if [[ $COUNT > 1 ]] ; then
+		# JUlien added printProgress and checkFileExists calls here - untested so far (added 6 calls for each)
+		printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*_1.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz""
 	  	cat $SEARCH_DL*_1.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*_2.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz""
 	  	cat $SEARCH_DL*_2.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
   	else # If only single file, move, don't copy
+		printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*_1.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz""
 	  	mv $SEARCH_DL*_1.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+		printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*_2.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz""
 	  	mv $SEARCH_DL*_2.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+		$CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
 	  fi
- 
+
 	else #Single-End Reads
     COUNT=$(ls -1 $SEARCH_DL*.fastq.gz | wc -l)
     if [[ $COUNT > 1 ]] ; then # If only single file, move, don't copy
+      printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz""
       cat $SEARCH_DL*.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+      checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
     else
+      printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz""
       mv $SEARCH_DL*.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+      checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
     fi
 	fi
 
@@ -555,60 +577,56 @@ function extractFastq () {
 }
 
 ### Trim fastq files for adaptors using trimmomatic
-### Could be called with $1=directory that holds fastq files
+### Could be called individually with $1=directory that holds fastq files
+# JULIEN: modify this to redirect the stdout to a log file
 function trimReads () {
   if [[ $TRIM_READ == false || -z $1 ]]; then #exit script if not needed
-    printProgress "[trimReads] Reads not trimmed."
+    printProgress "[trimReads] Read trimming not required. Skipping trim step."
     return 0
   fi
 
   cd $TEMP_DIR
   printProgress "[trimReads] Started at [$(date)]"
-    
+
   for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
     determinePairedFastq
 
     if [[ $PAIRED_END ]]; then
       printProgress "[trimReads] Trimming "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz..."
-
-      $TRIMMOMATIC PE -threads 10 $FASTQ_PATH"_1.fastq.gz" $FASTQ_PATH"_2.fastq.gz" \
+      $TRIMMOMATIC PE -threads $RUN_THREAD $FASTQ_PATH"_1.fastq.gz" $FASTQ_PATH"_2.fastq.gz" \
       $NAME"_trim_1.fastq.gz" $NAME"_unpaired_trim_1.fastq.gz" $NAME"_trim_2.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz" \
       ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
       SLIDINGWINDOW:4:20 \
-      MINLEN:36        
-        
+      MINLEN:36
       mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
       mv $NAME"_trim_2.fastq.gz" $FASTQ_PATH"_2.fastq.gz"
 
     else #Single-End
       printProgress "[trimReads] Trimming $NAME.fastq.gz"
-
-      $TRIMMOMATIC SE -threads 10 $FASTQ_PATH".fastq.gz" $FASTQ_PATH"_trim.fastq.gz" \
+      $TRIMMOMATIC SE -threads $RUN_THREAD $FASTQ_PATH".fastq.gz" $FASTQ_PATH"_trim.fastq.gz" \
       ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
       SLIDINGWINDOW:4:20 \
       MINLEN:36
-
-		  mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
+      mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
     fi
 
     printProgress "[trimReads] Finished trimming and renaming fastq files for $NAME..."
-      
   done
-    
   rm *unpaired*
   cd $CURRENT_DIRECTORY
 }
-  
+
 ### Determine paired or single-end from name of fastq file
+### Assign file name variables used in downstream functions
 function determinePairedFastq () {
-  if [[ $FILE == *"_2.fastq.gz" ]] ; then 
+  if [[ $FILE == *"_2.fastq.gz" ]] ; then
     continue #dont process 2nd read, continue to next iteration
   fi
-  
+
   if [[ $FILE == *"_1.fastq.gz" ]] ; then
     FASTQ_PATH=${FILE//_1.fastq.gz/} #removes everything that's after // - leaving path to directory
     NAME=${FASTQ_PATH##*/} #removes all prefixes prior to the last / - removing path to directory
-    
+
     PAIRED_END=true
     FILE_FASTQ1=$FASTQ_PATH"_1.fastq.gz"
     FILE_FASTQ2=$FASTQ_PATH"_2.fastq.gz"
@@ -623,7 +641,7 @@ function determinePairedFastq () {
 
   FILE_RAW_BAM=$NAME"_raw.bam"
   FILE_BAM=$NAME".bam"
-  
+
   if [[ $NAME == *_[Rr]ep* ]] ; then #creating name of folder that will be storing the BAMs
     X=${NAME%_*} #removing the "_Rep"
     BAM_FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
@@ -643,12 +661,14 @@ function masterAlign () {
   fi
 
   cd $TEMP_DIR
-  printProgress "[masterAlign] Started at [$(date)]"
-  
-  STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
 
+  ### Aligner parameters
+  STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
   BISMARK_ARGUMENTS="--chunkmbs $BISMARK_MEM --multicore $BOWTIE_THREAD --genome $BISMARK_GENOME_DIR "
   SEARCH_KEY=${1:-$SEARCH_KEY}
+
+
+  printProgress "[masterAlign] Started at [$(date)]"
 
   for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*$SEARCH_KEY*fastq.gz; do
     determinePairedFastq
@@ -669,19 +689,18 @@ function masterAlign () {
     if $ALLELE_RUN; then #allele specific run will need to do unpacking
       continue #move onto next set instead of refining the produced RAW BAM
     fi
-    
+
     refineBam
-    
+
   done
 
   printProgress "[masterAlign] Alignment of $SEARCH_KEY fastq files to $GENOME_BUILD completed at [$(date)]"
-
   cd $CURRENT_DIRECTORY
 
   if [[ $TYPE == "Hi-C" ]]; then
     exit #for HiC data, the rest of script doesn't need to be run (only to align with download and align with HiCUP"\
   fi
-  
+
 }
 
 ### Alignment of RNASeq data using STAR
@@ -696,7 +715,7 @@ function alignSTAR () {
     printProgress "[masterAlign STAR] Aligning $NAME.fastq.gz to genome..."
     $STAR $STAR_ARGUMENTS --readFilesIn $FILE_FASTQ --outFileNamePrefix $NAME
   fi
-
+  checkFileExists $FILE_STAR_OUTPUT
   printProgress "[masterAlign STAR] Alignment completed -> $FILE_RAW_BAM"
   mv $FILE_STAR_OUTPUT $FILE_RAW_BAM
   rm -r $SEARCH_KEY*"STAR"*
@@ -728,17 +747,17 @@ function alignBismark () {
   rm *report.txt
 }
 
-### Alignment of HiC data with HiCUP, assumed to be paired end 
+### Alignment of HiC data with HiCUP, assumed to be paired end
 function alignHiCUP () {
-  ENZYME=$(grep -e $NAME $INPUT_FILE | cut -f5 | head -n 1) 
+  ENZYME=$(grep -e $NAME $INPUT_FILE | cut -f5 | head -n 1)
 
   if [[ -z $ENZYME ]]; then
     printProgress "[masterAlign HiCUP] ERROR:\tDigestion enzyme was not entered for $SEARCH_KEY HiC dataset..."
     exit 1
   fi
-    
+
   printProgress "[masterAlign HiCUP] Digesting $GENOME_BUILD with $ENZYME"
-  hicup_digester --re1 $ENYZME --outdir $TEMP_DIR  --genome $GENOME_BUILD"_"$SEARCH_KEY $GENOME_FILE
+  hicup_digester --re1 $ENZYME --outdir $TEMP_DIR  --genome $GENOME_BUILD"_"$SEARCH_KEY $GENOME_FILE
   local DIGEST_FILE=$(ls $TEMPDIR/Digest*$SEARCH_KEY*)
 
   printProgress "[masterAlign HiCUP] Aligning $NAME to $GENOME_BUILD"
@@ -748,27 +767,27 @@ function alignHiCUP () {
   rm $DIGEST_FILE
 }
 
-### Alignment of ChIP data with BWA
+### Alignment of ChIPseq data with BWA-mem
 function alignBWA () {
   FILE_SAM=$NAME".sam"
-     
+
   if $PAIRED_END; then
     printProgress "[masterAlign BWA] Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
     $BWA mem -t $RUN_THREAD $GENOME_FILE $FILE_FASTQ1 $FILE_FASTQ2 > $FILE_SAM
-  
+
   else #Single-End
     printProgress "[masterAlign BWA] Aligning "$NAME" to genome..."
-    $BWA mem -t $RUN_THREAD $GENOME_FILE $FILE_FASTQ > $FILE_SAM 
+    $BWA mem -t $RUN_THREAD $GENOME_FILE $FILE_FASTQ > $FILE_SAM
   fi
 
   printProgress "[masterAlign BWA] Converting sam file to .bam file..."
   $SAMTOOLS view -bhS -@ $RUN_THREAD $FILE_SAM > $FILE_RAW_BAM
   printProgress "[masterAlign BWA] Alignment completed -> $FILE_RAW_BAM"
   rm $FILE_SAM
-  
+
 }
 
-### Alignment of ChIPSeq data using BT2 (for allelic specific)
+### Alignment of ChIPSeq data using bowtie2 (for allelic specific)
 function alignBowtie2 () {
   FILE_SAM=$NAME".sam"
 
@@ -788,24 +807,24 @@ function alignBowtie2 () {
 
 }
 
-### Sort and mark duplicates in BAM file after alignment
+### Sort and mark duplicate alignments in BAM file
 function refineBam () {
   local FILE_CLEANED_BAM=$NAME"_cleaned.bam"
   local FILE_SORTED_BAM=$NAME"_sort.bam"
-  
+
   #soft clipping alignment that hangs off end of reference & set MAPQ to 0 for unmapped reads
   printProgress "[refineBAM] Refining $FILE_RAW_BAM"
   $PICARD CleanSam I=$FILE_RAW_BAM O=$FILE_CLEANED_BAM
 
   printProgress "[refineBAM] Sorting by coordinates..."
   $SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE_SORTED_BAM -T $NAME $FILE_CLEANED_BAM
-    
+
   printProgress "[refineBAM] Marking duplicates..." #not removing the duplicates
   $PICARD MarkDuplicates I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt"
 
   mv $FILE_BAM $BAM_FOLDER
   printProgress "[refineBAM] Final $FILE_BAM is moved to $BAM_FOLDER."
-  
+
   rm $FILE_RAW_BAM $FILE_CLEANED_BAM $FILE_SORTED_BAM #remove all the buffer bam files
 
 }

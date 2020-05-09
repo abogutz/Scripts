@@ -1,25 +1,28 @@
-#! /bin/bash
-#$ -cwd
-#$ -pe ncpus 4
-#$ -l h_vmem=20G
-#$ -m e
-#$ -M tiffyyleung@gmail.com
+#!/bin/bash
+
+#SBATCH --account=def-mlorincz
+#SBATCH --ntasks=4            	 # number of MPI processes
+#SBATCH --mem-per-cpu=58G     	 # memory; default unit is megabytes
+#SBATCH --time=0-23:00           # time (DD-HH:MM)
+
+# High-level script that calls functions from SRAtoBW_functions.sh
+# Takes as input a tab-delimited file with SRACODE & NAME of datasets (run MasterDAT.sh -h for help)
+# By default, data are first downloaded, trimmed (optional), aligned and converted to normalized bigWigs
 
 
+### USER ACTION REQUIRED ###
+#Provide full path to where Github Scripts directory is located
+#Please ensure functions, MasterDAT.sh and config files are within same directory (don't move them!)
+SCRIPTS_DIR=/home/jra/bin/Scripts
 
-###From tab-delimited file with SRACODE & NAME of dataset
-###All the data are first downloaded, then trimmed (optional), and aligned 
-
-#TODO: Provide full path to where Github Scripts directory is located 
-#Ensure functions, MasterDAT.sh and config files are within same directory
-SCRIPTS_DIR=/brcwork/lorincz_lab/tleung/Scripts
-
-#############################################
-
-#TODO: Ensure it's the correct config file for the server
-source $SCRIPTS_DIR/Graham.config
+### USER ACTION REQUIRED ###
+#Choose the correct config file specific to the server you are currently using (see SCRIPTS_DIR for config files)
+source $SCRIPTS_DIR/ComputeCanada.config
 source $SCRIPTS_DIR/SRAtoBW_functions.sh
 SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0)
+
+
+
 
 ############### PIPELINE ###############
 
@@ -38,11 +41,17 @@ if $ALLELE_SPECIFIC; then
   masterAlign #align fastq to pseudogenome
   unpackAllelic $HAPLO_1 #unpack reads from the aligned files into two different files to look at allele specific
   unpackAllelic $HAPLO_2
+  #projectAllelic here in order to keep replicates separate
 fi
 
-collapseReplicates
-projectAllelic
-masterTrackHub
+collapseReplicates #combine bam files generated from technical or biological duplicates (end in _rep1 _rep2 or _Rep1 _Rep2)
+
+# add and if allele-specific here?
+projectAllelic #convert pseudogenome coordinates back onto the reference
+#
+
+
+masterTrackHub #convert bam to bigWigs and create TrackHub hierarchy
 removeFASTQ
 
 
