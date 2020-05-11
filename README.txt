@@ -11,6 +11,7 @@ Restart terminal to allow for initialization of conda.
 
 2. Download all required software for the pipeline.
 The ones listed are the ones required for Graham/Cedar.
+conda activate
 conda install -c bioconda entrez-direct
 conda install -c bioconda deeptools
 conda install -c bioconda bismark
@@ -32,12 +33,12 @@ chmod +x bigWigAverageOverBed
 git clone https://github.com/tiffyl/Scripts.git
 
 
-4. Open the config file and complete all the TODOs.
+4. Open the config file and complete all the USER ACTION REQUIRED.
 
-5. Open the MasterDAT.sh and complete all the TODOs.
+5. Open the MasterDAT.sh and complete all the USER ACTION REQUIRED.
 
-Also, edit the top of the script with the corresponding submission requirement. 
-Fill in any <> spaces with your own information.
+6. Also, edit the top of the script with the corresponding submission requirement. 
+Fill in any <> spaces with your own information. Examples:
 
 ----> COMPUTE CANADA (CEDAR/GRAHAM)
 #SBATCH --account=<Group Name>            # required
@@ -53,3 +54,33 @@ Fill in any <> spaces with your own information.
 #$ -l h_vmem=15G		# memory
 #$ -m e
 #$ -M <email address>
+
+
+
+7. Check dependencies by running MasterDAT.sh with the -D option
+
+8. Check available options by running MasterDAT.sh with the -h option
+
+9. Run the pipeline. For example: 
+
+Working in USER jra on the CEDAR server:
+Starting with a list of SRA codes
+~/bin/Scripts/MasterDAT.sh -i Leung2020.txt
+Starting with zipped FASTQ files
+sbatch ~/bin/Scripts/MasterDAT.sh -k -r -T -f ./Fastq -x C57BL6JxSPRET_14wk_Female_brain_ctx_RNA_Keown2017
+
+
+
+
+
+Troubleshooting
+
+Issue: Output files have names 'study*fastq.gz'
+Problem: You forgot to add "_rep#" to your filename, causing the script to not detect your input files
+Solution: Append "_rep#" to your filename, even if there is only one replicate available, e.g.:
+myfile_RNAseq_study2020.fastq.gz --> myfile_RNAseq_study2020_rep1.fastq.gz 
+Problem2: You input FASTQs that did not end in exactly ".fastq.gz".
+
+Issue: Folder containing output files does not exist
+Problem: You forgot to add "_studyAndYear" to your filename, causing the script to not create a new directory
+Solution example: myfile_RNAseq_rep1.fastq.gz --> myfile_RNAseq_Batten2019_rep1.fastq.gz

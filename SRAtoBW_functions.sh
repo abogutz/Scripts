@@ -56,6 +56,10 @@ HELP_FULL="\n$HELP\n
 \nThis script has been designed to streamline and standardize the procurement of data from the SRA database, as well as alignment and visualization of all data. Given an input file listing the SRA files to be downloaded, it will automatically download them, decompress, rename according to the users desires, align to the genome of choice, collapse replicates and finally generate a UCSC-compatible track hub including bigwig files. Users can opt to use some or all of these features depending on their input or output needs.\n
 \nIt is generally best to run this script in a clean folder, as it performs many cleanup steps on both the current folder and ALL subdirectories. For instance, any folders that include \"STAR\" in the name will be removed, as the STAR program leaves temporary aligns behind when finished.\n
 \nAlignment:\tChIPseq - bwa mem\n\t\tRNAseq - STAR\n\t\tBSSeq/PBAT/RRBS - bismark\n
+
+\nPlease include the following information in your filenames:\n<RNAseq/ChIPseq/BSseq>_<study>_<replicate>
+\nExample input.txt file:\nGSM3597247\tC57BL6J_oocyte_RNApolII_ChIPseq_Bogutz2019_rep1\nExample run command:\n~/bin/Scripts/MasterDAT.sh -i input.txt\n\n
+
 \n\nOPTIONS:
 -h\tPrints help page.\n\t
 -i\tSRA Input File. Must be in the format Accession(tab)DesiredName.\n\t\tDesiredName must be formatted specifically. A final identifier \n\t\tmust be present at the end of the name by which data should \n\t\tbe grouped (ex. Foo2018, etc.). The aligned files will be in a \n\t\tdirectory of this name. If there are replicates, the name will\n\t\tbe followed by an underscore and \"RepX\" - this will be removed \n\t\tfrom the final name upon collapsing replicates. Data type \n\t\tshould be included somewhere in the name; if not, it will be\n\t\tprepended to the name as 'RNAseq' or 'BSSeq' or 'ChIPseq'.\n\t
@@ -64,7 +68,7 @@ HELP_FULL="\n$HELP\n
 -B\tBAM Input with realignment. Will extract reads from .bam files\n\t\tin listed directory and realign to genome of choice.\n\t
 -d\tTemporary directory. Useful for solid-state drives etc.\n\t\tPlease change the default using BRC.config.\n\t
 -D\tCheck Dependencies and exit.\n\t
--f\tInput .fastq files. Provide folder name in which fastq files\n\t\tare located (files must end in .fastq.gz).\n\t\tData type must be included in name. Accepted: RNA, ChIP, BSSeq,\n\t\t PBAT, RRBS, ATAC, DNAse, HiC\n\t
+-f\tInput .fastq files. Provide folder name in which fastq files\n\t\tare located (files must end in .fastq.gz).\n\t\tData type must be included in name. Accepted: RNA, ChIP, BSSeq,\n\t\tPBAT, RRBS, ATAC, DNAse, HiC\n\t
 -F\tOnly output .fastq files.\n\t
 -g\tGenome build for alignment. Allowable: mm9, mm10, rn5, rn6,\n\t\toryCun2, mesAur1, or hg19. Default=mm10\n\t
 -k\tKeep .fastq files when done.\n\t
@@ -514,7 +518,6 @@ function extractPaired () {
 }
 
 
-### INDENTING PROBLEMS HERE###
 ### Extract fastq using fasterq-dump, compress FASTQ then concatenate FASTQ from same samples
 function extractFastq () {
   COMPRESS_COUNTER=0
@@ -576,45 +579,52 @@ function extractFastq () {
   rm $SEARCH_DL
 }
 
-### Trim fastq files for adaptors using trimmomatic
-### Could be called individually with $1=directory that holds fastq files
 # JULIEN: modify this to redirect the stdout to a log file
+### Trim fastq files for adaptors using trimmomatic
+### Could be called with $1=directory that holds fastq files
 function trimReads () {
-  if [[ $TRIM_READ == false || -z $1 ]]; then #exit script if not needed
-    printProgress "[trimReads] Read trimming not required. Skipping trim step."
-    return 0
-  fi
+	if [[ $TRIM_READ == false || -z $1 ]]; then #exit script if not needed
+		printProgress "[trimReads] Read trimming not required. Skipping trim step."
+		return 0
+	fi
 
-  cd $TEMP_DIR
-  printProgress "[trimReads] Started at [$(date)]"
+	cd $TEMP_DIR
+	printProgress "[trimReads] Started at [$(date)]"
 
-  for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
-    determinePairedFastq
+	for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
+		determinePairedFastq
 
-    if [[ $PAIRED_END ]]; then
-      printProgress "[trimReads] Trimming "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz..."
-      $TRIMMOMATIC PE -threads $RUN_THREAD $FASTQ_PATH"_1.fastq.gz" $FASTQ_PATH"_2.fastq.gz" \
-      $NAME"_trim_1.fastq.gz" $NAME"_unpaired_trim_1.fastq.gz" $NAME"_trim_2.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz" \
-      ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
-      SLIDINGWINDOW:4:20 \
-      MINLEN:36
-      mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
-      mv $NAME"_trim_2.fastq.gz" $FASTQ_PATH"_2.fastq.gz"
+		if [[ $PAIRED_END ]]; then
+			printProgress "[trimReads] Trimming "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz..."
 
-    else #Single-End
-      printProgress "[trimReads] Trimming $NAME.fastq.gz"
-      $TRIMMOMATIC SE -threads $RUN_THREAD $FASTQ_PATH".fastq.gz" $FASTQ_PATH"_trim.fastq.gz" \
-      ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
-      SLIDINGWINDOW:4:20 \
-      MINLEN:36
-      mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
-    fi
+			$TRIMMOMATIC PE -threads 10 $FASTQ_PATH"_1.fastq.gz" $FASTQ_PATH"_2.fastq.gz" \
+			$NAME"_trim_1.fastq.gz" $NAME"_unpaired_trim_1.fastq.gz" $NAME"_trim_2.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz" \
+			ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
+			SLIDINGWINDOW:4:20 \
+			MINLEN:36
 
-    printProgress "[trimReads] Finished trimming and renaming fastq files for $NAME..."
-  done
-  rm *unpaired*
-  cd $CURRENT_DIRECTORY
+			mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
+			mv $NAME"_trim_2.fastq.gz" $FASTQ_PATH"_2.fastq.gz"
+
+		else #Single-End
+			printProgress "[trimReads] Trimming $NAME.fastq.gz"
+
+			$TRIMMOMATIC SE -threads 10 $FASTQ_PATH".fastq.gz" $FASTQ_PATH"_trim.fastq.gz" \
+			ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
+			SLIDINGWINDOW:4:20 \
+			MINLEN:36
+
+			mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
+		fi
+
+		printProgress "[trimReads] Finished trimming and renaming fastq files for $NAME..."
+
+	done
+
+	rm *unpaired*
+	cd $CURRENT_DIRECTORY
 }
+
 
 ### Determine paired or single-end from name of fastq file
 ### Assign file name variables used in downstream functions
@@ -831,50 +841,65 @@ function refineBam () {
 
 ### Searches for .bam files containing _Rep#.bam in nested directories and combines them into a single bam
 function collapseReplicates () {
-  cd $TEMP_DIR
+	cd $TEMP_DIR
 	CURRENT=""
 	printProgress "[collapseReplicates] Started at [$(date)]"
-	
+
 	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
-		if [[ $FILE == *_[Rr]ep* ]]; then 
-		  MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam}
-			if [[ $CURRENT != ${FILE//_[Rr]ep*.bam/}*.bam ]]; then 
+		if [[ $FILE == *_[Rr]ep* ]]; then
+
+			# Julien attempts to rename the MERGED_BAM variable to include the number of merged replicates
+			MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam}
+			printProgress "Tiffany naming: $MERGED_BAM"
+			if [[ $CURRENT != ${FILE//_[Rr]ep*.bam/}*.bam ]]; then
 				CURRENT=$FILE
 				printProgress "[collapseReplicates] Merging to $MERGED_BAM"
-				$SAMTOOLS merge -@ $RUN_THREAD $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
-				
-        if [[ $KEEP_REPLICATES == false ]]; then
-          printProgress "[collapseReplicates] Removing replicates"
-				  rm ${FILE//_[Rr]ep*.bam/}_*ep*.bam
-        fi
 
-        printProgress "[collapseReplicates] Indexing BAM file..."
-        $SAMTOOLS index ${MERGED_BAM//.bam/}*.bam #index merged & replicates (if available)
+				# Julien edits here: rename file and add --write-index to samtools merge
+				REPLICATE_COUNT=$(ls -l ${FILE//_[Rr]ep*.bam/}*.bam | wc -l)
+				printProgress "Julien Rep counts: $REPLICATE_COUNT"
+				MERGED_BAM=${MERGED_BAM//.bam/_"$REPLICATE_COUNT"_.bam}
+				printProgress "Julien new naming: $MERGED_BAM"
+				$SAMTOOLS merge --threads $RUN_THREAD --write-index $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
 
-        if $KEEP_REPLICATES; then
-				  local REP_DIR=$(dirname $FILE)/"Reps" 
-				  mkdir -p $REP_DIR
-				  printProgress "[collapseReplicates] Moving all replicates into $REP_DIR"
-				  mv ${MERGED_BAM//.bam/}*_[Rr]ep* $REP_DIR
-        fi
+				if [[ $KEEP_REPLICATES == false ]]; then
+					printProgress "[collapseReplicates] Removing replicates"
+					rm ${FILE//_[Rr]ep*.bam/}_*ep*.bam
+				fi
+
+#				printProgress "[collapseReplicates] Indexing BAM file..."
+#				$SAMTOOLS index ${MERGED_BAM//.bam/}*.bam #index merged & replicates (if available)
+
+				if $KEEP_REPLICATES; then
+					local REP_DIR=$(dirname $FILE)/"Reps"
+					mkdir -p $REP_DIR
+					printProgress "[collapseReplicates] Moving all replicates into $REP_DIR"
+					mv ${MERGED_BAM//.bam/}*_[Rr]ep* $REP_DIR
+					printProgress "[collapseReplicates] Indexing replicates..."
+					$SAMTOOLS index $REP_DIR/${MERGED_BAM//.bam/}*_[Rr]ep*
+				fi
 			fi
-			
-    else
-      printProgress "[collapseReplicates] No replicates for $FILE"
-      MERGED_BAM=$FILE
-      printProgress "[collapseReplicates] Indexing BAM file..."
-      $SAMTOOLS index $MERGED_BAM
+
+		else
+			printProgress "[collapseReplicates] No replicates for $FILE"
+			MERGED_BAM=$FILE
+			printProgress "[collapseReplicates] Indexing BAM file..."
+			$SAMTOOLS index $MERGED_BAM
 		fi
 
-#    printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
-#    $SAMTOOLS flagstat $MERGED_BAM
-		
+		printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
+		$SAMTOOLS flagstat $MERGED_BAM | tee -a $LOG_FILE
 	done
 
-  printProgress "[collapseReplicates] All replicates for $SEARCH_KEY has been combined at [$(date)]"
-
-  cd $CURRENT_DIRECTORY
+#	checkFileExists $MERGED_BAM #this is actually useless as an empty BAM containing only a header will pass this check
+#	checkFileExists "$MERGED_BAM".bai
+	printProgress "[collapseReplicates] All replicates for $SEARCH_KEY has been combined at [$(date)]"
+	cd $CURRENT_DIRECTORY
 }
+
+
+
+
 
 ### Checking dependencies of the functions
 function checkDependencies () {

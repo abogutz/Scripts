@@ -2,8 +2,8 @@
 
 #SBATCH --account=def-mlorincz
 #SBATCH --ntasks=4            	 # number of MPI processes
-#SBATCH --mem-per-cpu=58G     	 # memory; default unit is megabytes
-#SBATCH --time=0-23:00           # time (DD-HH:MM)
+#SBATCH --mem-per-cpu=20G     	 # memory; default unit is megabytes
+#SBATCH --time=0-00:30           # time (DD-HH:MM)
 
 # High-level script that calls functions from SRAtoBW_functions.sh
 # Takes as input a tab-delimited file with SRACODE & NAME of datasets (run MasterDAT.sh -h for help)
