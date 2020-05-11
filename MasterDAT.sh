@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #SBATCH --account=def-mlorincz
-#SBATCH --ntasks=4            	 # number of MPI processes
-#SBATCH --mem-per-cpu=20G     	 # memory; default unit is megabytes
-#SBATCH --time=0-00:30           # time (DD-HH:MM)
+#SBATCH --ntasks=4							 # number of MPI processes
+#SBATCH --mem-per-cpu=20G		 	 # memory; default unit is megabytes
+#SBATCH --time=0-00:30					 # time (DD-HH:MM)
 
 # High-level script that calls functions from SRAtoBW_functions.sh
 # Takes as input a tab-delimited file with SRACODE & NAME of datasets (run MasterDAT.sh -h for help)
@@ -36,12 +36,12 @@ trimReads
 masterAlign
 
 if $ALLELE_SPECIFIC; then
-  ALLELE_RUN=true
-  setPseudogenome #change reference genome of alignement to pseudogenome
-  masterAlign #align fastq to pseudogenome
-  unpackAllelic $HAPLO_1 #unpack reads from the aligned files into two different files to look at allele specific
-  unpackAllelic $HAPLO_2
-  #projectAllelic here in order to keep replicates separate
+	ALLELE_RUN=true
+	setPseudogenome #change reference genome of alignement to pseudogenome
+	masterAlign #align fastq to pseudogenome
+	unpackAllelic $HAPLO_1 #unpack reads from the aligned files into two different files to look at allele specific
+	unpackAllelic $HAPLO_2
+	#projectAllelic here in order to keep replicates separate
 fi
 
 collapseReplicates #combine bam files generated from technical or biological duplicates (end in _rep1 _rep2 or _Rep1 _Rep2)
