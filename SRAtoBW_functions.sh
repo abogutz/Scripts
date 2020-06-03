@@ -4,7 +4,7 @@
 
 ##System Specific Configuration
 
-#USER ACTION: Only if you ever plan on using these functions directly in the command line (otherwise ignore)
+#Only if you ever plan on using these functions directly in the command line (otherwise ignore)
 #Ensure correct config file if using
 if [[ -z $SCRIPTS_DIR ]]; then
 	pushd $(dirname $0) > /dev/null
@@ -226,8 +226,10 @@ function setGenome () {
 		mkdir -p $TRACK_HUB_DIR
 		printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./$TRACK_HUB_DIR/hub.txt
 	fi
-	
-	MOUSE="." #USER ACTION: Change based on layout of reference genome folder (otherwise ignore)
+
+### USER ACTION REQUIRED ###
+# Please specify the exact location of your existing reference genomes (otherwise ignore)
+	MOUSE="." 
 	RAT="."	 
 
 	case $1 in
@@ -309,7 +311,8 @@ function setGenome () {
 			;;
 	esac
 
-	#USER ACTION: Change the names of the following files & directories 
+### USER ACTION REQUIRED ###
+#Specify location of the following files & directories if layout is not as example
 	CHROM_SIZES=$GENOME_DIR/$1".sizes"
 	GENOME_FILE=$GENOME_DIR/$1".fa"
 	STAR_GENOME_DIR=$GENOME_DIR
