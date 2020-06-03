@@ -28,13 +28,10 @@ chmod +x bigWigAverageOverBed
 3. Clone this repository from github onto server.
 (Personally like to keep it at a location where I usually work in so I can access the script easily. Alternatively add it to your path.)
 git clone https://github.com/tiffyl/Scripts.git
-cd Scripts
-chmod +x MasterDAT.sh
 
+4. Open the config file and complete all the USER ACTION.
 
-4. Open the config file and complete all the TODOs.
-
-5. Open the MasterDAT.sh and complete all the TODOs.
+5. Open the MasterDAT.sh and complete all the USER ACTION.
 
 Also, edit the top of the script with the corresponding submission requirement. 
 Fill in any <> spaces with your own information.

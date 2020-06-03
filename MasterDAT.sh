@@ -11,13 +11,13 @@
 ###From tab-delimited file with SRACODE & NAME of dataset
 ###All the data are first downloaded, then trimmed (optional), and aligned 
 
-#TODO: Provide full path to where Github Scripts directory is located 
+#USER ACTION: Provide full path to where Github Scripts directory is located 
 #Ensure functions, MasterDAT.sh and config files are within same directory
 SCRIPTS_DIR=/project/def-mlorincz/tleung/Scripts
 
 #############################################
 
-#TODO: Ensure it's the correct config file for the server
+#USER ACTION: Ensure it's the correct config file for the server
 source $SCRIPTS_DIR/ComputeCanada.config
 source $SCRIPTS_DIR/SRAtoBW_functions.sh
 SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0)
