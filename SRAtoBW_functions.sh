@@ -194,20 +194,30 @@ function parseOptions () {
 				;;
 		esac
 	done
-	
+
+	checkDependencies
 	setGenome $GENOME_BUILD
-	
+
 }
 
 ###Set up log file for runs
 function setUp () {
 	if [[ $SEP_PARA == false ]]; then 
-		LOG_FILE=$CURRENT_DIRECTORY/$SEARCH_KEY"_"$(date '+%y-%m-%d')"_log.txt"
+		if [[ -z $SEARCH_KEY ]]; then
+			#without a search term associated with a -f or -b command, the logfiles might be messy (written to same logfile)
+			#using a random number in placement to avoid confusion
+			LOG_FILE=$CURRENT_DIRECTORY/$RANDOM"_"$(date '+%y-%m-%d')"_log.txt"
+		else
+			LOG_FILE=$CURRENT_DIRECTORY/$SEARCH_KEY"_"$(date '+%y-%m-%d')"_log.txt"
+		fi
+		
 		checkDependencies 
 		printProgress "[setUp] Starting Script"
+		printProgress "[setUp] Checking Dependencies"
+		checkDependencies
 		printProgress "[setUp] Search key for the set: $SEARCH_KEY"
 		printProgress "[setUp] SRA array: $CODE_ARRAY"
-		printProgress "[setUp setGenome] Genome used for data is $GENOME_BUILD"
+		setGenome
 	fi
 }
 
@@ -224,122 +234,61 @@ function checkFileExists () {
 
 ### Create neccessary files for reference genome
 function setGenome () {
-	if [[ $FASTQ_ONLY == false ]] ; then
-		mkdir -p $TRACK_HUB_DIR
-		printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./$TRACK_HUB_DIR/hub.txt
-	fi
+	GENOME_BUILD=$1
+	local FOUND_GENOME=false
 
-	case $1 in
-		"mm9")
-			GENOME_DIR=$GENOME_DIR/$1
-			if [[ $FASTQ_ONLY == false ]]; then
-				printf "chr5\t143666090\t143666091" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome mm9\ntrackDb mm9/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
+	#check that the directory exist here (fill in function)
+#	if not found (echo -e "ERROR: \t$1 is not a valid genome build. Enter -h for help."
+#			exit 1)
+
+	for ASSEMBLY in $GENOME_DIR/*; do #searching for folder with name of both haplotypes
+		if [[ $(basename $ASSEMBLY) == $GENOME_BUILD ]]; then
+			GENOME_DIR=$GENOME_DIR/$GENOME_BUILD
+			FOUND_GENOME=true
+			if [[ $SEP_PARA == false ]];
+				printProgress "[setGenome] Genome used for data is $GENOME_BUILD"
+				printProgress "[setGenome] Path to genome directory: $GENOME_DIR"
 			fi
-			;;
-		"mm10")
-			GENOME_DIR=$GENOME_DIR/$1 
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "chr5\t142904365\t142904366" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome mm10\ntrackDb mm10/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"rn6")
-			GENOME_DIR=$GENOME_DIR/$1
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "chr12\t13718023\t13718024" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome rn6\ntrackDb rn6/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"rn5")
-			GENOME_DIR=$GENOME_DIR/$1
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "chr12\t15748011\t15748012" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome rn5\ntrackDb rn5/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"hg19")
-			GENOME_DIR=$GENOME_DIR/$1
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "chr7\t5527531\t5527532" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome hg19\ntrackDb hg19/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"oryCun2")
-			GENOME_DIR=$GENOME_DIR/$1
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "chr7\t87232876\t87232877" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome oryCun2\ntrackDb oryCun2/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"mesAur1")
-			GENOME_DIR=$GENOME_DIR/$1
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "KB708222.1\t2764075\t2764076" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome mesAur1\ntrackDb mesAur1/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"bosTau8")
-			GENOME_DIR=$GENOME_DIR/$1
-			if [ $FASTQ_ONLY = false ] ; then
-				printf "chr25\t39345586\t39345587" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome bosTau8\ntrackDb bosTau8/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"susScr11")
-			GENOME_DIR=$GENOME_DIR/$1
-			if [ $FASTQ_ONLY = false ] ; then
-				printf "chr12\t1321691\t1321692" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome susScr11\ntrackDb susScr11/trackDb.txt" > ./Track_Hub/genomes.txt
-			fi
-			;;
-		*)
-			echo -e "ERROR: \t$1 is not a valid genome build. Enter -h for help."
-			exit 1
-			;;
-	esac
+			
+			break
+		fi
+	done
+
+	if [[ $FOUND_GENOME == false ]];
+		echo -e "Genome entered is invalid, please check reference genome folder."
+		exit
+	fi
 
 ### USER ACTION REQUIRED ###
 #Specify location of the following files & directories if layout is not as example
 #The $GENOME_DIR specified in this location, already includes the specific species
-	CHROM_SIZES=$GENOME_DIR/$1".sizes"
-	GENOME_FILE=$GENOME_DIR/$1".fa"
+	CHROM_SIZES=$GENOME_DIR/$GENOME_BUILD".sizes"
+	GENOME_FILE=$GENOME_DIR/$GENOME_BUILD".fa"
+	ACTB_BED=$GENOME_DIR/$GENOME_BUILD"_Actb.bed"
+
 	STAR_GENOME_DIR=$GENOME_DIR
 	BISMARK_GENOME_DIR=$GENOME_DIR
 	BOWTIE2_INDEXES=$GENOME_DIR/$GENOME_BUILD
 
+	#directory that stores pseudogenomes for allelic pipeline
 	DIPLOID_GENOME_DIR=$GENOME_DIR/diploid
 	HAPLOID_GENOME_DIR=$GENOME_DIR/haploid
 	
 	checkFileExists $CHROM_SIZES
 	checkFileExists $GENOME_FILE
+	checkFileExists $ACTB_BED
+
+	if [[ $FASTQ_ONLY == false ]] ; then
+		mkdir -p $TRACK_HUB_DIR
+
+		printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./$TRACK_HUB_DIR/hub.txt
+
+		TRACK_FOLDER=$TRACK_HUB_DIR/$GENOME_BUILD
+		mkdir -p $TRACK_FOLDER
+		TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+		printf "genome "$GENOME_BUILD"\ntrackDb "$GENOME_BUILD"/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt		
+	fi
+
 }
 
 ### Create subset of SRACODE array to be used in parallel running
@@ -879,10 +828,10 @@ function collapseReplicates () {
 
 ### Checking dependencies of the functions
 function checkDependencies () {
-	printProgress "[checkDependencies] Checking Dependencies"
+	echo -e "[checkDependencies] Checking Dependencies"
 	EXIT=0
 	for COMMAND in "${DEPENDENCIES[@]}"; do
-		printProgress "[setup checkDependencies] $COMMAND..."
+		echo -e "[checkDependencies] $COMMAND..."
 		command -v $COMMAND > /dev/null 2>&1 || {
 			echo -e >&2 "\t\t$COMMAND not found!"
 			EXIT=1
@@ -1237,10 +1186,10 @@ function masterTrackHub () {
 function generateRNATrack () {
 	if [[ $PAIRED == true ]] ; then
 		echo "Extracting F reads over Actb..."
-		$SAMTOOLS view -L Actb.bed -f 64 $FOLDER_FILE > Actb.sam
+		$SAMTOOLS view -L $ACTB_BED -f 64 $FOLDER_FILE > Actb.sam
 	else
 		echo "Extracting reads over Actb..."
-		$SAMTOOLS view -L Actb.bed $FOLDER_FILE > Actb.sam
+		$SAMTOOLS view -L $ACTB_BED $FOLDER_FILE > Actb.sam
 	fi
 	
 	STRANDED=$(awk 'BEGIN{PLUS=0; MINUS=0} {
@@ -1261,6 +1210,7 @@ function generateRNATrack () {
 				}
 			}' Actb.sam)
 	rm Actb.sam
+	
 	echo "Data are" $STRANDED
 
 	if [[ $STRANDED == "Unstranded" ]] ; then
@@ -1334,3 +1284,4 @@ function printTrackHubStranded () {
 	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_pos" $2 $2"_pos" $2"_pos" $2"_pos.bw" | tee -a $TRACKDB
 	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" | tee -a $TRACKDB
 }
+
