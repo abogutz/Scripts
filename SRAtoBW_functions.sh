@@ -210,10 +210,8 @@ function setUp () {
 		else
 			LOG_FILE=$CURRENT_DIRECTORY/$SEARCH_KEY"_"$(date '+%y-%m-%d')"_log.txt"
 		fi
-		
-		checkDependencies 
+
 		printProgress "[setUp] Starting Script"
-		printProgress "[setUp] Checking Dependencies"
 		checkDependencies
 		printProgress "[setUp] Search key for the set: $SEARCH_KEY"
 		printProgress "[setUp] SRA array: $CODE_ARRAY"
@@ -266,7 +264,7 @@ function setGenome () {
 	GENOME_FILE=$GENOME_DIR/$GENOME_BUILD".fa"
 	ACTB_BED=$GENOME_DIR/$GENOME_BUILD"_Actb.bed"
 
-	STAR_GENOME_DIR=$GENOME_DIR
+	STAR_GENOME_DIR=$GENOME_DIR/$GENOME_BUILD"-STAR"
 	BISMARK_GENOME_DIR=$GENOME_DIR
 	BOWTIE2_INDEXES=$GENOME_DIR/$GENOME_BUILD
 
@@ -510,6 +508,10 @@ function extractFastq () {
 			mv $SEARCH_DL*_1.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
 			mv $SEARCH_DL*_2.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
 		fi
+
+		#checkpoint: fastq files have been moved correctly
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
  
 	else #Single-End Reads
 		COUNT=$(ls -1 $SEARCH_DL*.fastq.gz | wc -l)
@@ -518,6 +520,10 @@ function extractFastq () {
 		else
 			mv $SEARCH_DL*.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
 		fi
+
+		#checkpoint: fastq files have been moved correctly
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+
 	fi
 
 	printProgress "[masterDownload] Fastq files for $NAME are moved to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY"
@@ -546,9 +552,17 @@ function trimReads () {
 			ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
 			SLIDINGWINDOW:4:20 \
 			MINLEN:36
-				
+
+			#checkpoint: fastq have been trimmed correctly
+			checkFileExists $NAME"_trim_1.fastq.gz"
+			checkFileExists $NAME"_trim_2.fastq.gz"
+			
 			mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
 			mv $NAME"_trim_2.fastq.gz" $FASTQ_PATH"_2.fastq.gz"
+
+			#checkpoint: fastq files have been moved correctly
+			checkFileExists $FASTQ_PATH"_1.fastq.gz"
+			checkFileExists $FASTQ_PATH"_2.fastq.gz"
 
 		else #Single-End
 			printProgress "[trimReads] Trimming $NAME.fastq.gz"
@@ -558,7 +572,13 @@ function trimReads () {
 			SLIDINGWINDOW:4:20 \
 			MINLEN:36
 
+			#checkpoint: fastq have been trimmed correctly
+			checkFileExists $NAME"_trim.fastq.gz"
+
 			mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
+
+			#checkpoint: fastq files have been moved correctly
+			checkFileExists $FASTQ_PATH".fastq.gz"
 		fi
 
 		printProgress "[trimReads] Finished trimming and renaming fastq files for $NAME..."
@@ -583,12 +603,19 @@ function determinePairedFastq () {
 		FILE_FASTQ1=$FASTQ_PATH"_1.fastq.gz"
 		FILE_FASTQ2=$FASTQ_PATH"_2.fastq.gz"
 
+		#checkpoint: fastq files are found before passing into aligner
+		checkFileExists $FILE_FASTQ1
+		checkFileExists $FILE_FASTQ2
+
 	else
 		FASTQ_PATH=${FILE//.fastq.gz}
 		NAME=${FASTQ_PATH##*/}
 
 		PAIRED_END=false
 		FILE_FASTQ=$FASTQ_PATH".fastq.gz"
+
+		#checkpoint: fastq files are found before passing into aligner
+		checkFileExists $FILE_FASTQ
 	fi
 
 	FILE_RAW_BAM=$NAME"_raw.bam"
@@ -637,6 +664,8 @@ function masterAlign () {
 			alignBWA
 		fi
 
+		checkFileExists $FILE_RAW_BAM
+
 		if $ALLELE_RUN; then #allele specific run will need to do unpacking
 			continue #move onto next set instead of refining the produced RAW BAM
 		fi
@@ -670,6 +699,7 @@ function alignSTAR () {
 
 	printProgress "[masterAlign STAR] Alignment completed -> $FILE_RAW_BAM"
 	mv $FILE_STAR_OUTPUT $FILE_RAW_BAM
+
 	rm -r $SEARCH_KEY*"STAR"*
 }
 
@@ -773,6 +803,7 @@ function refineBam () {
 	$PICARD MarkDuplicates I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt"
 
 	mv $FILE_BAM $BAM_FOLDER
+	checkFileExists $BAM_FOLDER/$FILE_BAM
 	printProgress "[refineBAM] Final $FILE_BAM is moved to $BAM_FOLDER."
 	
 	rm $FILE_RAW_BAM $FILE_CLEANED_BAM $FILE_SORTED_BAM #remove all the buffer bam files
@@ -815,6 +846,8 @@ function collapseReplicates () {
 			printProgress "[collapseReplicates] Indexing BAM file..."
 			$SAMTOOLS index $MERGED_BAM
 		fi
+
+		checkFileExists $MERGED_BAM
 
 		printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
 		$SAMTOOLS flagstat $MERGED_BAM | tee -a $LOG_FILE
