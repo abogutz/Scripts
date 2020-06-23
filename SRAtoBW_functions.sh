@@ -195,9 +195,10 @@ function parseOptions () {
 		esac
 	done
 
-	checkDependencies
-	setGenome $GENOME_BUILD
-
+	if $SEP_PARA; then
+		checkDependencies
+		setGenome $GENOME_BUILD
+	fi
 }
 
 ###Set up log file for runs
@@ -212,10 +213,11 @@ function setUp () {
 		fi
 
 		printProgress "[setUp] Starting Script"
-		checkDependencies
 		printProgress "[setUp] Search key for the set: $SEARCH_KEY"
 		printProgress "[setUp] SRA array: $CODE_ARRAY"
-		setGenome
+		checkDependencies
+		printProgress "[setUp] All required dependencies are found"
+		setGenome $GENOME_BUILD
 	fi
 }
 
@@ -225,7 +227,7 @@ function printProgress () {
 
 function checkFileExists () {
 	if [[ ! -f $1 ]]; then
-		echo "ERROR:\tFile $1 does not exist"
+		echo -e "ERROR:\tFile $1 does not exist"
 		exit 1
 	fi
 }
@@ -243,16 +245,15 @@ function setGenome () {
 		if [[ $(basename $ASSEMBLY) == $GENOME_BUILD ]]; then
 			GENOME_DIR=$GENOME_DIR/$GENOME_BUILD
 			FOUND_GENOME=true
-			if [[ $SEP_PARA == false ]];
+			if [[ $SEP_PARA == false ]]; then
 				printProgress "[setGenome] Genome used for data is $GENOME_BUILD"
 				printProgress "[setGenome] Path to genome directory: $GENOME_DIR"
 			fi
-			
 			break
 		fi
 	done
 
-	if [[ $FOUND_GENOME == false ]];
+	if [[ $FOUND_GENOME == false ]]; then
 		echo -e "Genome entered is invalid, please check reference genome folder."
 		exit
 	fi
@@ -315,7 +316,7 @@ function parallelRun () {
 						echo "Submitting on server"
 						DATE=$(date '+%y-%m-%d')
 						$SERVER_SUBMIT "MasterDAT_"$DATE"_"$CURRENT_SET $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY
-						sleep 30 #pause for 30 secs before running next code b/c fetching data takes some time
+						sleep 10 #pause before running next code 
 					fi
 
 				fi
@@ -331,7 +332,7 @@ function parallelRun () {
 					echo "Submitting on server"
 					DATE=$(date '+%y-%m-%d')
 					$SERVER_SUBMIT "MasterDAT_"$DATE"_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
-					sleep 30
+					sleep 10
 				fi
 
 			fi
@@ -397,6 +398,7 @@ function downloadReads () {
 	SRACODE=$code
 	NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
+	sleep $(( $RANDOM % 300 )) #sleep for random (between 0 and 300) seconds
 	printProgress "[masterDownload wget] Downloading $SRACODE to $TEMP_DIR..."
 	for DL in $($ESEARCH -db sra -query $SRACODE \
 							| $EFETCH -format runinfo \
@@ -697,9 +699,13 @@ function alignSTAR () {
 		$STAR $STAR_ARGUMENTS --readFilesIn $FILE_FASTQ --outFileNamePrefix $NAME
 	fi
 
+	checkFileExists $FILE_STAR_OUTPUT
+
 	printProgress "[masterAlign STAR] Alignment completed -> $FILE_RAW_BAM"
 	mv $FILE_STAR_OUTPUT $FILE_RAW_BAM
 
+	mv $NAME"Log.final.out" $CURRENT_DIRECTORY
+	rm $NAME*"out"*
 	rm -r $SEARCH_KEY*"STAR"*
 }
 
@@ -819,18 +825,20 @@ function collapseReplicates () {
 	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
 		if [[ $FILE == *_[Rr]ep* ]]; then 
 			MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam}
+			
 			if [[ $CURRENT != ${FILE//_[Rr]ep*.bam/}*.bam ]]; then 
+				local REP_COUNT=$(ls -l ${FILE//_[Rr]ep*.bam/}*.bam | wc -l)
 				CURRENT=$FILE
-				printProgress "[collapseReplicates] Merging to $MERGED_BAM"
-				$SAMTOOLS merge -@ $RUN_THREAD $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
+				printProgress "[collapseReplicates] Merging $REP_COUNT replicates to "$(basename $MERGED_BAM)" and indexing"
+				$SAMTOOLS merge --threads $RUN_THREAD --write-index -f $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
 				
 				if [[ $KEEP_REPLICATES == false ]]; then
 					printProgress "[collapseReplicates] Removing replicates"
 					rm ${FILE//_[Rr]ep*.bam/}_*ep*.bam
 				fi
 
-				printProgress "[collapseReplicates] Indexing BAM file..."
-				$SAMTOOLS index ${MERGED_BAM//.bam/}*.bam #index merged & replicates (if available)
+#				printProgress "[collapseReplicates] Indexing BAM file..."
+#				$SAMTOOLS index ${MERGED_BAM//.bam/}*.bam #index merged & replicates (if available)
 
 				if $KEEP_REPLICATES; then
 					local REP_DIR=$(dirname $FILE)/"Reps" 
@@ -849,7 +857,7 @@ function collapseReplicates () {
 
 		checkFileExists $MERGED_BAM
 
-		printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
+		printProgress "[collapseReplicates] Obtaining flagstats for "$(basename $MERGED_BAM)" flagstats"
 		$SAMTOOLS flagstat $MERGED_BAM | tee -a $LOG_FILE
 		
 	done
@@ -1250,8 +1258,8 @@ function generateRNATrack () {
 		generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
 		printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
 	else
-		FILE_BIGWIG_POS=$TRACK_FOLDER"$FILE_NAME""_pos.bw"
-		FILE_BIGWIG_NEG=$TRACK_FOLDER"$FILE_NAME""_neg.bw"
+		FILE_BIGWIG_POS=$TRACK_FOLDER/$FILE_NAME"_pos.bw"
+		FILE_BIGWIG_NEG=$TRACK_FOLDER/$FILE_NAME"_neg.bw"
 		FILE_BIGWIG_TEMP=$TEMP_DIR"/temp.bw"
 		FILE_BEDGRAPH_TEMP=$TEMP_DIR"/temp.bedgraph"
 		FILE_BEDGRAPH_TEMP2=$TEMP_DIR"/temp2.bedgraph"
