@@ -583,12 +583,12 @@ function extractFastq () {
 ### Trim fastq files for adaptors using trimmomatic
 ### Could be called with $1=directory that holds fastq files
 function trimReads () {
-	if [[ $TRIM_READ == false || -z $1 ]]; then #exit script if not needed
+	if [[ $TRIM_READ == false ]]; then #exit script if not needed
 		printProgress "[trimReads] Read trimming not required. Skipping trim step."
 		return 0
 	fi
 
-	cd $TEMP_DIR
+	cd $TEMP_DIR # Let's try removing instances of these
 	printProgress "[trimReads] Started at [$(date)]"
 
 	for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
@@ -605,6 +605,7 @@ function trimReads () {
 
 			mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
 			mv $NAME"_trim_2.fastq.gz" $FASTQ_PATH"_2.fastq.gz"
+			# would be nice to keep unpaired (F&R) for re-alignment, critical for many WGBS libraries
 
 		else #Single-End
 			printProgress "[trimReads] Trimming $NAME.fastq.gz"
@@ -674,7 +675,7 @@ function masterAlign () {
 
 	### Aligner parameters
 	STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
-	BISMARK_ARGUMENTS="--chunkmbs $BISMARK_MEM --multicore $BOWTIE_THREAD --genome $BISMARK_GENOME_DIR "
+	BISMARK_ARGUMENTS="--chunkmbs $BISMARK_MEM -p $BOWTIE_THREAD --bowtie2 --bam $BISMARK_GENOME_DIR "
 	SEARCH_KEY=${1:-$SEARCH_KEY}
 
 
@@ -753,8 +754,8 @@ function alignBismark () {
 
 	printProgress "[masterAlign Bismark] Alignment completed -> $FILE_RAW_BAM"
 	mv $BISMARK_OUTPUT $FILE_RAW_BAM
-	cleanBismark
-	rm *report.txt
+	cleanBismark # ????
+#	rm *report.txt
 }
 
 ### Alignment of HiC data with HiCUP, assumed to be paired end
@@ -968,7 +969,7 @@ function checkPseudogenome () {
 	if $ALLELE_SPECIFIC && $SEP_PARA ; then
 
 		cd $TEMP_DIR
-		
+
 		CROSS_LIST=$(awk '(NF==4 && ($3!="" || $4!="")) {print $3"_"$4}' $INPUT_FILE | sort | uniq) #create array of crosses
 		EXIT_SCRIPT=false
 
@@ -977,26 +978,26 @@ function checkPseudogenome () {
 			HAPLO_2=${CROSS##*_}
 
 			if [[ -z $HAPLO_1 || -z $HAPLO_2 ]]; then
-				echo -e "ERROR:\t One of your samples only have 1 haplotype entered. \nPlease ensure to enter both haplotypes of allele pipeline" \
-				| tee -a 
+				echo -e "ERROR:\t One of your samples only has 1 haplotype entered. \nPlease to enter both haplotypes." \
+				| tee -a
 				EXIT_SCRIPT=true
 				continue #continue to next iteration of cross
 			fi
 
 			MAKE_GENOME=true
-			
+
 			for DIP in $DIPLOID_GENOME_DIR/*; do #searching for folder with name of both haplotypes
 				if [[ $DIP == *$HAPLO_1* && $DIP == *$HAPLO_2* ]]; then
 					MAKE_GENOME=false
 
 					if [[ ! -f $HAPLOID_GENOME_DIR/$HAPLO_1/$HAPLO_1".fa.refmap" ]] || \
 						 [[ ! -f $HAPLOID_GENOME_DIR/$HAPLO_2/$HAPLO_2".fa.refmap" ]]; then #check RefMaps exist
-						echo -e "ERROR:\t One of the refmap ($HAPLO_1 or $HAPLO_2) doesn't exists."
+						echo -e "ERROR:\t Either refmap file for haplotype $HAPLO_1 or $HAPLO_2 doesn't exists."
 						EXIT_SCRIPT=true
 					fi
 
 					echo "Reference genome for $CROSS is found"
-					break #exit the loop of iterating thru all the diploid genomes for this combo of cross 
+					break #exit the loop of iterating thru all the diploid genomes for this combo of cross
 				fi
 			done
 
@@ -1004,43 +1005,42 @@ function checkPseudogenome () {
 				echo "ERROR:\t Diploid genome was not found for $CROSS. \nPlease use provided CreateDipPseudoGenome.sh to obtain diploid pseudogenome."
 				EXIT_SCRIPT=true
 			fi
-			
+
 		done
 
 		cd $CURRENT_DIRECTORY
-		
+
 		if $EXIT_SCRIPT; then
-			echo -e "Errors were found with setup. \nPlease check error message before running again." 
+			echo -e "Errors were found with setup. \nPlease check error message before running again."
 			exit #exit script to ensure input is formatted correctly before running the whole script
 		fi
-	fi	
+	fi
 }
 
 function setPseudogenome () {
 	NAME=$SEARCH_KEY
 	printProgress "[setPseudogenome] Started at [$(date)]"
-	
+
 	HAPLO_1=$(grep -e $NAME $INPUT_FILE | cut -f3 | head -n 1)
 	HAPLO_2=$(grep -e $NAME $INPUT_FILE | cut -f4 | head -n 1)
 
 	if [[ -z $HAPLO_1 || -z $HAPLO_2 ]]; then #if either haplotype is not entered, no allele specific for this data
-		printProgress "[setPseudogenome] Haplotypes not provided, allele specific pipeline is not ran on $NAME"
+		printProgress "[setPseudogenome] Haplotypes not provided, will not run allele specific pipeline on $NAME"
 		continue #dont continue the function for this SRACODE entry (move on to next code)
 	fi
-	
+
 	CROSS_COMBO=$HAPLO_1"_"$HAPLO_2
 	printProgress "[setPseudogenome] Haplotypes for $NAME are $HAPLO_1 and $HAPLO_2."
-	
+
 	for DIP in $DIPLOID_GENOME_DIR/*; do #searching for folder with name of both haplotypes
 		if [[ $DIP == *$HAPLO_1* && $DIP == *$HAPLO_2* ]]; then
 			GENOME_BUILD=$(basename $DIP)
 			GENOME_FILE=$DIP/*".fa"
 			STAR_GENOME_DIR=$DIP/*"-STAR"
 			BOWTIE2_INDEXES=$DIP/$GENOME_BUILD
-
-			HAPLO_1_REFMAP=$HAPLOID_GENOME_DIR/$HAPLO_1/$HAPLO_1".fa.refmap"		
+			BISMARK_INDEXES=$DIP/Bisulfite_Genome #added by Julien
+			HAPLO_1_REFMAP=$HAPLOID_GENOME_DIR/$HAPLO_1/$HAPLO_1".fa.refmap"
 			HAPLO_2_REFMAP=$HAPLOID_GENOME_DIR/$HAPLO_2/$HAPLO_2".fa.refmap"
-
 			printProgress "[setPseudogenome] Reference directory for $NAME is set to $DIP"
 			break
 		fi
@@ -1050,12 +1050,12 @@ function setPseudogenome () {
 function unpackAllelic () { #working on bam that has already aligned to the pseudogenome (once per haplotype)
 	cd $TEMP_DIR
 	local HAPLO=$1
-	
-	printProgress "[unpackAllelic] Unpacking for $HAPLO started at [$(date)]"
-	
+
+	printProgress "[unpackAllelic] Unpacking reads aligned to $HAPLO with MAPQ = $MIN_MAPQ started at [$(date)]"
+
 	for TOT_RAW_BAM in $TEMP_DIR/$SEARCH_KEY*"_raw.bam"; do #should be in replicates (NAME1_rep1_raw.bam)
-#take SAM file, align to pseudogenome
-#split header into two, to separate the reads into two haplotypes, rename chr from hap1_chr to chr
+	#take SAM file, align to pseudogenome
+	#split header into two, to separate the reads into two haplotypes, rename chr from hap1_chr to chr
 		NAME_HAPLO_SUFFIX=$SEARCH_KEY"_"$HAPLO"_q$MIN_MAPQ"${TOT_RAW_BAM//$SEARCH_KEY/} #inserting haplotype name (-> NAME1_HAPLO_qMINMAPQ_rep1_raw.bam)
 		NAME=${NAME_HAPLO//_raw.bam/} #will include _rep if applicable
 		FILE_RAW_BAM=$NAME"_raw.bam"
@@ -1073,12 +1073,11 @@ function unpackAllelic () { #working on bam that has already aligned to the pseu
 		| awk '(( $3 ~ "'$HAPLO'" ) && ( $7 ~ "'$HAPLO'" || $7 == "*" || $7 == "=" )) {print $0}' \
 		| sed 's/'$HAPLO'_chr/chr/g' >> $FILE_RAW_BAM
 
-		printProgress "[unpackAllelic $HAPLO] Finished unpacking $TOT_RAW_BAM for $HAPLO -> $FILE_RAW_BAM"
-		
-		refineBAM
-#		cat $FILE"_markDupeMetrics.txt" >> $SEARCH_KEY"_alignLog.txt"
+		printProgress "[unpackAllelic $HAPLO] Finished unpacking $HAPLO specific reads from $TOT_RAW_BAM -> $FILE_RAW_BAM"
 
-		rm $TOT_RAW_BAM
+		refineBAM # does this not take an argument here?
+
+#		rm $TOT_RAW_BAM # need to keep this in order to extract reads on HAPLO-2
 	done
 
 	printProgress "[unpackAllelic] Unpacking bams for $HAPLO completed at [$(date)]"
@@ -1088,36 +1087,36 @@ function unpackAllelic () { #working on bam that has already aligned to the pseu
 function projectAllelic () {
 	if [[ $ALLELE_SPECIFIC == false ]]; then
 		return 0 #dont run this code if the script is not allele specific
-	fi 
+	fi
 
 	cd $TEMP_DIR
 
 	printProgress "[projectAllelic] Started at [$(date)]"
-		
+
 	for FILE_BAM in $CURRENT_DIRECTORY/$BAM_FOLDER_NAME/*".bam"; do
 		if [[ $FILE_BAM != *$HAPLO_1* || $FILE_BAM != *$HAPLO_2* ]]; then #only projecting bams that were aligned to pseudogenome
 			continue
 		fi
-		
+
 		printProgress "[projectAllelic] Removing duplicates from $FILE_BAM with F=$FLAG"
 		local NAME_MAP_FLAG=${FILE_BAM//.bam/}"_F"$FLAG
 		FLAG_BAM=$NAME_MAP_FLAG".bam"
 		$SAMTOOLS view -bh -F $FLAG $FILE_BAM > $FLAG_BAM
- 
+
 		#nonscaled projection
 		printProgress "[projectAllelic] Converting $FLAG_BAM to bedGraph"
 		$BEDTOOLS genomecov -ibam $FLAG_BAM -bg -split -scale $SCALING_FACTOR > $NAME_MAP_FLAG"_preProject.bedgraph"
 		prepWigAndProject $NAME_MAP_FLAG $NAME_MAP_FLAG"_preProject.bedgraph"
-			 
+
 		#RPM scaled projection
 		local READ_COUNT=$(samtools view -c $FLAG_NAME".bam")
 		local SCALING_FACTOR=$(echo "scale=25; 1000000/$READ_COUNT" | bc) #calculating with 25 decimal places at least
 		printProgress "[projectAllelic RPM] Detected $READ_COUNT filtered reads"
 
 		if [[ $STRANDED_ALLELIC ]]; then #stranded RPM
-			printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 1st in pair..."							
+			printProgress "[projectAllelic stranded RPM] Splitting $FLAG_BAM reads by 1st in pair..."
 			local FIRST_PAIR_BAM=$NAME_MAP_FLAG"_firstInPair.bam"
-			$SAMTOOLS view -bh -f 0x0040 $FLAG_BAM > $FIRST_PAIR_BAM		
+			$SAMTOOLS view -bh -f 0x0040 $FLAG_BAM > $FIRST_PAIR_BAM
 			$BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand + > $NAME_MAP_FLAG"_first_pos_RPM.bedGraph"
 			$BEDTOOLS genomecov -ibam $FIRST_PAIR_BAM -bg -split -scale $SCALING_FACTOR -strand - > $NAME_MAP_FLAG"_first_neg_RPM.bedGraph"
 			rm $FIRST_PAIR_BAM
@@ -1138,7 +1137,7 @@ function projectAllelic () {
 			prepWigAndProject $NAME_MAP_FLAG"_RPM_pos" $NAME_MAP_FLAG"_pos_preProject.bedGraph" " plus stranded RPM"
 
 			#minus/neg strand
-			printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for minus strand..."				 
+			printProgress "[projectAllelic stranded RPM] Combining stranded bedgraphs for minus strand..."
 			$BEDTOOLS unionbedg -i $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph" > $NAME_MAP_FLAG"_n_tmp.bedGraph"
 			rm $NAME_MAP_FLAG"_first_pos_RPM.bedGraph" $NAME_MAP_FLAG"_second_neg_RPM.bedGraph"
 			awk '{OFS="\t";FS="\t"} {print $1, $2, $3, $4+$5}' $NAME_MAP_FLAG"_n_tmp.bedGraph" > $NAME_MAP_FLAG"_neg_preProject.bedGraph"
@@ -1163,7 +1162,7 @@ function prepWigAndProject () {
 
 	printProgress "[projectAllelic$PROGRESS_APPEND] Converting $PRE_BEDGRAPH to WIG"
 	local PRE_WIG=$FINAL_NAME"_preProject.wig"
-	awk ' 
+	awk '
 	BEGIN {
 				 print "track type=wiggle_0"
 	}
@@ -1174,7 +1173,7 @@ function prepWigAndProject () {
 					}
 	}' $PRE_BEDGRAPH > $PRE_WIG
 	gzip $PRE_WIG
-	
+
 	printProgress "[projectAllelic$PROGRESS_APPEND ALEA] Projecting $PRE_WIG and refmap files to reference coordinates"
 	local PROJECTED_BEDGRAPH=$FINAL_NAME".bedgraph" #output bedgraph with reference genome coordinates
 	if [[ $PRE_WIG == *$HAPLO_1* ]]; then
@@ -1184,7 +1183,7 @@ function prepWigAndProject () {
 	fi
 
 	mv $PROJECTED_BEDGRAPH $CURRENT_DIRECTORY/TrackHub/
-	
+
 	#maybe can integrate with masterTrackHub
 	printProgress "[projectAllelic$PROGRESS_APPEND] Converting projected $PROJECTED_BEDGRAPH to BIGWIG"
 	$BEDGRAPHTOBW $PROJECTED_BEDGRAPH $CHROM_SIZES $FINAL_NAME".bw"
@@ -1200,7 +1199,7 @@ function masterTrackHub () {
 	BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH_WIN --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates"
 
 	PRINTED_DIR=""
-	
+
 	for BAM_FILE in ./*/*$SEARCH_KEY*.bam; do #currently in $CURRENT_DIRECTORY
 		FOLDER_FILE=${BAM_FILE//.\//} #getting rid of the "./"
 		FILE=$(basename $BAM_FILE) #leaving just the basename of the file
@@ -1209,7 +1208,7 @@ function masterTrackHub () {
 		if [[ $BIN_SIZE != 1 ]] ; then
 			FILE_NAME=$FILE_NAME"_b"$BIN_SIZE
 		fi
-		
+
 		if [[ $SMOOTH_WIN != 0 ]] ; then
 			FILE_NAME=$FILE_NAME"_s"$SMOOTH_WIN
 		fi
@@ -1217,7 +1216,7 @@ function masterTrackHub () {
 		FOLDER_NAME=${FOLDER_FILE%%\/*} #removing longest text of the matching pattern (after "/" in this case)
 
 		if [[ $FOLDER_NAME != $PRINTED_DIR ]] ; then # Create supertrack for housing associated tracks
-			printf "track $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \n\n" | tee -a $TRACKDB 
+			printf "track $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \n\n" | tee -a $TRACKDB
 			PRINTED_DIR=$FOLDER_NAME
 		fi
 
@@ -1237,7 +1236,7 @@ function masterTrackHub () {
 			generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
 			printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
 		fi
-		
+
 	done
 	rm Actb.bed
 }
@@ -1250,7 +1249,7 @@ function generateRNATrack () {
 		echo "Extracting reads over Actb..."
 		$SAMTOOLS view -L Actb.bed $FOLDER_FILE > Actb.sam
 	fi
-	
+
 	STRANDED=$(awk 'BEGIN{PLUS=0; MINUS=0} {
 		if( and($2,16) == 16) {
 					MINUS++;
@@ -1319,7 +1318,7 @@ function generateBSTrack () {
 	rm $FILE_TEMP_1
 	rm $TEMP_DIR/CHG*
 	rm $TEMP_DIR/CHH*
-	rm $TEMP_DIR/CpG*
+#	rm $TEMP_DIR/CpG* # keep this file as it is required for Keegan's script
 	rm $TEMP_DIR/$FILE_NAME.*
 #		rm $TEMP_DIR/*.bai
 	#TODO Optional: keep more information? Lots of stuff being discarded
@@ -1333,7 +1332,7 @@ function generateBigwigsUnstranded () {
 }
 
 #$1=Supertrack name $2=Track name
-function printTrackHubUnstranded () { 
+function printTrackHubUnstranded () {
 	printf "\ttrack %s\n\tparent %s\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tbigDataUrl %s\n\tcolor 200,50,0\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tautoScale on\n\talwaysZero on\n\n" $2 $1 $2 $2 $2".bw" | tee -a $TRACKDB
 }
 

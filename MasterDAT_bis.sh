@@ -2,8 +2,8 @@
 
 #SBATCH --account=def-mlorincz           # required
 #SBATCH --nodes=1                        # cores distributed in # of nodes
-#SBATCH --ntasks-per-node=8              # number of MPI processes
-#SBATCH --mem=84G                        # total memory; default unit is megabytes
+#SBATCH --ntasks-per-node=32              # number of MPI processes
+#SBATCH --mem=120G                        # total memory; default unit is megabytes
 #SBATCH --time=00-1:00                  # time (DD-HH:MM)
 
 # High-level script that calls functions from SRAtoBW_functions.sh
