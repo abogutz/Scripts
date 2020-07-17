@@ -15,13 +15,11 @@ if [[ -z $SCRIPTS_DIR ]]; then
 	pushd $(dirname $0) > /dev/null
 	SCRIPTS_DIR=$(pwd -P)
 	popd > /dev/null
-	source $SCRIPTS_DIR/ComputeCanada.config
+	source $SCRIPTS_DIR/jrampb.config
 fi
 
 # Non-system specific variables
 CURRENT_DIRECTORY=$(pwd)
-FASTQ_DIRECTORY="./Fastq"
-TRACK_HUB_DIR="./Track_Hub"
 
 ALLELE_SPECIFIC=false
 ALLELE_RUN=false
@@ -29,23 +27,23 @@ BAM_INPUT=false
 BAM_REALIGNMENT=false
 FASTQ_INPUT=false
 FASTQ_ONLY=false
-KEEP_FASTQ=false
-KEEP_REPLICATES=false
-LOCAL_RUN=false
+KEEP_FASTQ=true
+KEEP_REPLICATES=true
+LOCAL_RUN=true
 SEP_PARA=false
 STRANDED_ALLELIC=false
-TRIM_READ=false
-USE_BOWTIE=false #default is bwa-mem
+TRIM_READ=true		# trim by default
+USE_BOWTIE=true 	# default is bowtie2
 
 CODE_ARRAY=""
 BIN_SIZE=1
 FLAG=1540 #read unmapped, read fails platform/vendor quality checks, read is PCR or optical duplicate
 GENOME_BUILD="mm10"
-MIN_MAPQ=5
+MIN_MAPQ=1
 NORMALIZE="CPM"
 SMOOTH_WIN=0
 
-DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$TRIMMOMATIC" $STAR $BISMARK $BOWTIE2 $BWA $SAMTOOLS "$PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
+DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$TRIMMOMATIC" $STAR $BISMARK $BOWTIE2 $SAMTOOLS "$PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
 OPTIONS="hi:ab:B:d:Df:Fg:kLm:M:n:N:ors:t:Tux:X"
@@ -117,7 +115,7 @@ function parseOptions () {
 				if $FASTQ_ONLY ; then
 					echo -e "ERROR:\tIncompatible options. Cannot generate .fastq files from .bam files."
 					exit 1
-				fi
+				fi	
 				;;
 			B) #bam input for realignmnet
 				BAM_REALIGNMENT=true
@@ -222,7 +220,14 @@ function printProgress () {
 
 function checkFileExists () {
 	if [[ ! -f $1 ]]; then
-		echo "ERROR:\tFile $1 does not exist"
+		echo "ERROR: File $1 does not exist"
+		exit 1
+	fi
+}
+
+function checkBamFileExists () {
+	if [[ ! -f $1 ]] && [[ $($SAMTOOLS view $1 | wc -l | cut -d ' ' -f4) != 0 ]]; then
+		echo "ERROR:\tBam file $1 does not exist or contains no aligned reads"
 		exit 1
 	fi
 }
@@ -241,18 +246,6 @@ function setGenome () {
 	RAT="."
 
 	case $1 in
-		"mm9")
-			GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
-			BISMARK_GENOME_DIR=$GENOME_DIR
-			BOWTIE_GENOME_DIR=$GENOME_DIR
-			if [[ $FASTQ_ONLY == false ]]; then
-				printf "chr5\t143666090\t143666091" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome mm9\ntrackDb mm9/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
 		"mm10")
 			GENOME_DIR=$GENOME_DIR/$MOUSE/$1/
 			if [[ $FASTQ_ONLY == false ]] ; then
@@ -273,46 +266,6 @@ function setGenome () {
 				printf "genome rn6\ntrackDb rn6/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
 			fi
 			;;
-		"rn5")
-			GENOME_DIR=$GENOME_DIR/$RAT/$1/
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "chr12\t15748011\t15748012" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome rn5\ntrackDb rn5/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"hg19")
-			GENOME_DIR=$GENOME_DIR/"Hsa"/$1/
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "chr7\t5527531\t5527532" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome hg19\ntrackDb hg19/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"oryCun2")
-			GENOME_DIR=$GENOME_DIR/"oryCun"/$1/
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "chr7\t87232876\t87232877" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome oryCun2\ntrackDb oryCun2/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
-		"mesAur1")
-			GENOME_DIR=$GENOME_DIR/"mesAur"/$1/
-			if [[ $FASTQ_ONLY == false ]] ; then
-				printf "KB708222.1\t2764075\t2764076" > Actb.bed
-				TRACK_FOLDER=$TRACK_HUB_DIR/$1
-				mkdir -p $TRACK_FOLDER
-				TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-				printf "genome mesAur1\ntrackDb mesAur1/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt
-			fi
-			;;
 		*)
 			echo -e "ERROR: \t$1 is not a valid genome build. Enter -h for help."
 			exit 1
@@ -330,6 +283,14 @@ function setGenome () {
 
 	checkFileExists $CHROM_SIZES
 	checkFileExists $GENOME_FILE
+}
+
+### Create an array of SRACODE passed listed in the tab-delimited file
+function createCodeArray () {
+	while read n; do #read command will read a line of and split them into words (2 words in files)
+		declare -a m=($n) #-a for an array m to be stored based on the line (SRACODE, NAME)
+		CODE_ARRAY=$CODE_ARRAY" "${m[0]} #add only SRACODE to this list
+	done < $INPUT_FILE #feeding FILE as stdin to this while read
 }
 
 ### Create subset of SRACODE array to be used in parallel running
@@ -390,7 +351,7 @@ function masterDownload () {
 		return 0
 	fi
 
-	mkdir $FASTQ_DIRECTORY
+	mkdir -p $FASTQ_DIRECTORY
 	if $BAM_REALIGNMENT; then
 		obtainFastqFromBAM
 		return 0 #after extracting fastq from BAM, can exit masterDownload function
@@ -398,8 +359,8 @@ function masterDownload () {
 
 	INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
 
-	if [[ -z $CODE_ARRAY ]]; then #this will basically only be used if the function was called by itself (may delete later) <-- Julien: keep it (what is F1?)!
-		INPUT_FILE=$CURRENT_DIRECTORY/$F1
+	if [[ -z $CODE_ARRAY ]]; then #this will basically only be used if the function was called by itself (may delete later) <-- Julien:what is F1?! Changed to 1!
+		INPUT_FILE=$CURRENT_DIRECTORY/$1
 		createCodeArray
 	fi
 
@@ -408,14 +369,15 @@ function masterDownload () {
 	printProgress "[masterDownload] Started at [$(date)]"
 
 	for code in $CODE_ARRAY; do
-		downloadReads
-		extractType
-		extractPaired
-		extractFastq
+#		downloadReads
+		downloadReadsJRA
+#		extractType
+#		extractPaired
+#		extractFastq
 	done
 	cd $CURRENT_DIRECTORY
 
-	printProgress "[masterDownload] All fastq files for $SEARCH_KEY is downloaded at [$(date)]"
+	printProgress "[masterDownload] All fastq files for $SEARCH_KEY are downloaded [$(date)]"
 
 	if $FASTQ_ONLY; then
 		printProgress "[masterDownload] Fastq files only. Exit script."
@@ -423,266 +385,179 @@ function masterDownload () {
 	fi
 }
 
-### Create an array of SRACODE passed listed in the tab-delimited file
-function createCodeArray () {
-	while read n; do #read command will read a line of and split them into words (2 words in files)
-		declare -a m=($n) #-a for an array m to be stored based on the line (SRACODE, NAME)
-		CODE_ARRAY=$CODE_ARRAY" "${m[0]} #add only SRACODE to this list
-	done < $INPUT_FILE #feeding FILE as stdin to this while read
-}
-
-
-### Download reads from SRA
-function downloadReads () {
-	DL_COUNTER=0
-
+function downloadReadsJRA () {
 	SRACODE=$code
 	NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-	printProgress "[masterDownload wget] Downloading $SRACODE to $TEMP_DIR... at [$(date)]"
-	for DL in $($ESEARCH -db sra -query $SRACODE \
-							| $EFETCH --format runinfo \
-							| cut -d ',' -f 10 \
-							| grep https); do
-		wget --no-check-certificate $DL -O $SEARCH_KEY"_"$(basename $DL) & #& this allow the command to run in parallel and in the background 
-		DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
-		((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
-	done
+	printProgress "[masterDownload one step JRA test] Downloading $SRACODE to temporary folder $TEMP_DIR... at [$(date)]"
+	DL=$($ESEARCH -db sra -query $SRACODE | $EFETCH --format runinfo | cut -d ',' -f 1 | grep -v "Run")
 
-	for pid in ${DL_PID_ARRAY[*]}
-	do
-		wait $pid #wait for all downloads to finish
-	done
-
-	printProgress "[masterDownload] Finished $SRACODE -> $NAME reads download."
-}
-
-### Determine data type (could be called with just SRACODE)
-function extractType() {
-	SRACODE=${1:-$SRACODE} #giving option to just use function to see what type of sequence it is? is this neccessary?
-
-	TYPE=$($ESEARCH -db sra -query $SRACODE \
-				| $EFETCH --format runinfo \
-				| cut -d ',' -f 13 \
-				| tail -n 2 \
-				| head -n 1)
-	printProgress "[masterDownload] Data type: $TYPE"
-
-	if [[ $TYPE == "ChIP-Seq" ]] && \
-		 [[ $NAME != *"ChIP"* ]]; then
-		 NAME="ChIPseq_"$NAME
-
-	elif [[ $TYPE == "RNA-Seq" ]] && \
-			 [[ $NAME != *"RNA"* ]] ; then
-			 MIN_MAPQ=255
-			 NAME="RNAseq_"$NAME
-
-	elif [[ $TYPE == "Bisulfite-Seq" ]] && \
-			 [[ $NAME != *"RRBS"* ]] && \
-			 [[ $NAME != *"BSSeq"* ]] && \
-			 [[ $NAME != *"PBAT"* ]] ; then
-			 NAME="BSSeq_"$NAME
-
-	elif [[ $TYPE == "ATAC-seq" ]] && \
-			 [[ $NAME != *"ATAC"* ]]; then
-			 NAME="ATACSeq_"$NAME
-
-	elif [[ $TYPE == "DNase-Hypersensitivity" ]] && \
-			 [[ $NAME != *"DNase"* ]]; then
-			 NAME="DNase_"$NAME
-
-	elif [[ $TYPE == "Hi-C" ]] && \
-			 [[ $NAME != *"HiC"* ]]; then
-			 NAME="HiC_"$NAME
-	fi
-	printProgress "[masterDownload] Name of data: $NAME"
-}
-
-### Determine data to be single or paired-end (could be called with just SRACODE)
-function extractPaired () {
-	SRACODE=${1:-$SRACODE}
-
-	PAIRED=$($ESEARCH -db sra -query $SRACODE \
-					| $EFETCH --format runinfo \
-					| cut -d ',' -f 16 \
-					| tail -n 2 \
-					| head -n 1)
-
-	if [[ $PAIRED == SINGLE ]]; then
-		PAIRED_END=false
-	printProgress "[masterDownload] Data are single-end."
+	# DETERMINE PAIRED-ENDEDNESS
+	COUNTING_DIR=$TEMP_DIR/$NAME"_counting_tmp"
+	$FASTQDUMP $DL -X 1 -O $COUNTING_DIR --split-files
+	if [[ ! -z `ls $COUNTING_DIR/*_2.fastq` ]]; then
+		READ_1_COUNT=$(ls -l  $COUNTING_DIR/*_1.fastq | wc -l )
+		READ_2_COUNT=$(ls -l  $COUNTING_DIR/*_2.fastq | wc -l )
+		#for example GSM1845258 contains both SE And PE libraries. Complete horse shit.
+		if [[ $READ_1_COUNT != $READ_2_COUNT ]]; then
+			printProgress "Single-end runs detected alongside paired-end in $NAME. We recommend downloading runs individually. Passing to next entry"
+			return 0 # leave behind temporary counting directory for troubleshooting
+		else
+			PAIRED_END=true
+			printProgress "[masterDownload] Data are paired-end."
+		fi
 	else
-		PAIRED_END=true
-	printProgress "[masterDownload] Data are paired-end."
+		PAIRED_END=false
+		printProgress "[masterDownload] Data are single-end."
 	fi
-}
+	rm -r $COUNTING_DIR
 
+	# DOWNLOAD
+	DOWNLOAD_DIR_TMP=$TEMP_DIR/"$NAME"_download_tmp
+	if $PAIRED_END; then
+		$FASTERQDUMP -O $DOWNLOAD_DIR_TMP -S -p $DL
+	else
+		$FASTERQDUMP -O $DOWNLOAD_DIR_TMP -p $DL
+	fi
 
-### Extract fastq using fasterq-dump, compress FASTQ then concatenate FASTQ from same samples
-function extractFastq () {
-	COMPRESS_COUNTER=0
-	COMPRESS_PID_ARRAY=""
-
-	local SEARCH_DL=*$SEARCH_KEY*[DSE]RR*
-
-	printProgress "[masterDownload extractFastq] Dumping fastq files..."
-	for SRA_FILE in $SEARCH_DL; do
-		$FASTERQDUMP -e $RUN_THREAD --split-files ./$SRA_FILE
-	done
-
-	printProgress "[masterDownload extractFastq] Compressing fastq files..." #simultaneously zip all the dump fastq files for that read
-	for DL_FASTQ in $SEARCH_DL*fastq; do
+	# COMPRESS FASTQ FILES: THIS SHOULD BE A SEPARATE FUNCTION!
+	printProgress "[masterDownload] Compressing fastq files..." #simultaneously zip all the dump fastq files for that read
+	for DL_FASTQ in $DOWNLOAD_DIR_TMP/*fastq; do
 		gzip $DL_FASTQ &
 		COMPRESS_PID_ARRAY[$COMPRESS_COUNTER]=$!
 		((COMPRESS_COUNTER++))
 	done
-
 	for gzipid in ${COMPRESS_PID_ARRAY[*]}; do
 		wait $gzipid #wait for all gzip to finish
 	done
 
-	printProgress "[masterDownload extractFastq] Concatenating fastq.gz files..."
 	if $PAIRED_END; then
-		COUNT=$(ls -1 $SEARCH_DL*_1.fastq.gz | wc -l)
-		if [[ $COUNT > 1 ]] ; then
-		# JUlien added printProgress and checkFileExists calls here - untested so far (added 6 calls for each)
-		printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*_1.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz""
-			cat $SEARCH_DL*_1.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
-		printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*_2.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz""
-			cat $SEARCH_DL*_2.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
-		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
-		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
-		else # If only single file, move, don't copy
-		printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*_1.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz""
-			mv $SEARCH_DL*_1.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
-		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
-		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
-		printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*_2.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz""
-			mv $SEARCH_DL*_2.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
-		$CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
-		fi
-
-	else #Single-End Reads
-		COUNT=$(ls -1 $SEARCH_DL*.fastq.gz | wc -l)
-		if [[ $COUNT > 1 ]] ; then # If only single file, move, don't copy
-			printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz""
-			cat $SEARCH_DL*.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
-			checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
-		else
-			printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz""
-			mv $SEARCH_DL*.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
-			checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
-		fi
+		cat $DOWNLOAD_DIR_TMP/*_1.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		cat $DOWNLOAD_DIR_TMP/*_2.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+	else
+		cat $DOWNLOAD_DIR_TMP/*.fastq.gz   > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+#	rm -rf $DOWNLOAD_DIR_TMP
 	fi
-
-	printProgress "[masterDownload] Fastq files for $NAME are moved to $CURRENT_DIRECTORY/$FASTQ_DRECTORY"
-	rm $SEARCH_DL
-}
-
-# JULIEN: modify this to redirect the stdout to a log file
-### Trim fastq files for adaptors using trimmomatic
-### Could be called with $1=directory that holds fastq files
-function trimReads () {
-	if [[ $TRIM_READ == false ]]; then #exit script if not needed
-		printProgress "[trimReads] Read trimming not required. Skipping trim step."
-		return 0
-	fi
-
-	cd $TEMP_DIR # Let's try removing instances of these
-	printProgress "[trimReads] Started at [$(date)]"
-
-	for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
-		determinePairedFastq
-
-		if [[ $PAIRED_END ]]; then
-			printProgress "[trimReads] Trimming "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz..."
-
-			$TRIMMOMATIC PE -threads 10 $FASTQ_PATH"_1.fastq.gz" $FASTQ_PATH"_2.fastq.gz" \
-			$NAME"_trim_1.fastq.gz" $NAME"_unpaired_trim_1.fastq.gz" $NAME"_trim_2.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz" \
-			ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
-			SLIDINGWINDOW:4:20 \
-			MINLEN:36
-
-			mv $NAME"_trim_1.fastq.gz" $FASTQ_PATH"_1.fastq.gz"
-			mv $NAME"_trim_2.fastq.gz" $FASTQ_PATH"_2.fastq.gz"
-			# would be nice to keep unpaired (F&R) for re-alignment, critical for many WGBS libraries
-
-		else #Single-End
-			printProgress "[trimReads] Trimming $NAME.fastq.gz"
-
-			$TRIMMOMATIC SE -threads 10 $FASTQ_PATH".fastq.gz" $FASTQ_PATH"_trim.fastq.gz" \
-			ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
-			SLIDINGWINDOW:4:20 \
-			MINLEN:36
-
-			mv $NAME"_trim.fastq.gz" $FASTQ_PATH".fastq.gz"
-		fi
-
-		printProgress "[trimReads] Finished trimming and renaming fastq files for $NAME..."
-
-	done
-
-	rm *unpaired*
-	cd $CURRENT_DIRECTORY
+	printProgress "[masterDownload] Fastq files for $NAME are moved to $FASTQ_DIRECTORY"
 }
 
 
 ### Determine paired or single-end from name of fastq file
 ### Assign file name variables used in downstream functions
-function determinePairedFastq () {
-	if [[ $FILE == *"_2.fastq.gz" ]] ; then
-		continue #dont process 2nd read, continue to next iteration
+# JRA: This can be overhauled... Why the use of FILE And NAME? Seems inconsistent, maybe I just don't understand
+# What is FILE?...
+function setupVariables () {
+	FULL_FILENAME=$1
+	if [[ $FULL_FILENAME == *"_2.fastq.gz" ]] ; then
+		continue 									#dont process 2nd read, continue to next iteration
 	fi
 
-	if [[ $FILE == *"_1.fastq.gz" ]] ; then
-		FASTQ_PATH=${FILE//_1.fastq.gz/} #removes everything that's after // - leaving path to directory
-		NAME=${FASTQ_PATH##*/} #removes all prefixes prior to the last / - removing path to directory
-
+	if [[ $FULL_FILENAME == *"_1.fastq.gz" ]] ; then
 		PAIRED_END=true
+		FASTQ_PATH=${FULL_FILENAME//_1.fastq.gz/} 	#removes everything that's after // - leaving path to directory
+		NAME=${FASTQ_PATH##*/} 						#removes all prefixes prior to the last / - removing path to directory
 		FILE_FASTQ1=$FASTQ_PATH"_1.fastq.gz"
 		FILE_FASTQ2=$FASTQ_PATH"_2.fastq.gz"
 
-	else
-		FASTQ_PATH=${FILE//.fastq.gz}
-		NAME=${FASTQ_PATH##*/}
-
+	else # SE sequencing
 		PAIRED_END=false
+		FASTQ_PATH=${FULL_FILENAME//.fastq.gz}
+		NAME=${FASTQ_PATH##*/}
 		FILE_FASTQ=$FASTQ_PATH".fastq.gz"
 	fi
 
 	FILE_RAW_BAM=$NAME"_raw.bam"
 	FILE_BAM=$NAME".bam"
 
-	if [[ $NAME == *_[Rr]ep* ]] ; then #creating name of folder that will be storing the BAMs
-		X=${NAME%_*} #removing the "_Rep"
-		BAM_FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
+	# JRA : this folder should store ALL files, excluding FASTQs (which will be held as symbolic links in this folder)
+	if [[ $NAME == *_[Rr]ep* ]] ; then 				#creating name of folder that will be storing the BAMs
+		X=${NAME%_*} 								#removing the "_Rep"
+		BAM_FOLDER_NAME=${X##*_} 					#Removing everything before the last _ (leaving grouping identifier)
 	else
 		BAM_FOLDER_NAME=${NAME##*_}
 	fi
 
-	BAM_FOLDER=$CURRENT_DIRECTORY/$BAM_FOLDER_NAME
+	BAM_FOLDER=$TEMP_DIR/$BAM_FOLDER_NAME
+#	BAM_FOLDER=$CURRENT_DIRECTORY/$BAM_FOLDER_NAME
 	mkdir -p $BAM_FOLDER
+	echo "$FASTQ_PATH $NAME $PAIRED_END $FILE_FASTQ $FILE_BAM $BAM_FOLDER"
 }
+
+
+# JULIEN: modify this to redirect the stdout to a log file
+### Trim fastq files for adaptors using trimmomatic
+### Could be called with $1=directory that holds fastq files
+function trimReads () {	
+	if [[ $TRIM_READ == false ]]; then #exit script if not needed, but make symbolic links to FASTQ files in the BAM folder
+		#BAM_FOLDER is specified in setupVariables 	BAM_FOLDER=$TEMP_DIR/$BAM_FOLDER_NAME
+		printProgress "[trimReads] Read trimming not required. Skipping trim step."
+		if [[ $PAIRED_END ]]; then
+			checkFileExists $FASTQ_PATH"_1.fastq.gz"
+			checkFileExists $FASTQ_PATH"_2.fastq.gz" 
+			ln -s $FASTQ_PATH"_1.fastq.gz" $BAM_FOLDER/$NAME"_1.fastq.gz"
+			ln -s $FASTQ_PATH"_2.fastq.gz" $BAM_FOLDER/$NAME"_2.fastq.gz"		
+		else
+			checkFileExists $FASTQ_PATH".fastq.gz" 
+			ln -s $FASTQ_PATH".fastq.gz" $BAM_FOLDER/$NAME".fastq.gz"
+		fi
+	fi
+	
+	cd $BAM_FOLDER
+	printProgress "[trimReads] Started at [$(date)]"
+
+	if [[ $PAIRED_END ]]; then
+		checkFileExists $FASTQ_PATH"_1.fastq.gz"
+		checkFileExists $FASTQ_PATH"_2.fastq.gz"
+		printProgress "[trimReads] Trimming "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz..."
+		$TRIMMOMATIC PE -threads $RUN_THREAD $FASTQ_PATH"_1.fastq.gz" $FASTQ_PATH"_2.fastq.gz" \
+		$NAME"_1.fastq.gz" $NAME"_unpaired_trim_1.fastq.gz" $NAME"_2.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz" \
+		ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
+		SLIDINGWINDOW:4:20 \
+		MINLEN:36
+	
+		# Keep unpaired filtered reads for WGBS data
+		if [[ $NAME == *"Bisulfite-Seq"* ]] || [[ $NAME == *"RRBS"* ]] || [[ $NAME == *"BSSeq"* ]] || [[ $NAME == *"PBAT"* ]] || [[ $NAME == *"DNAme"* ]]; then 
+			return 0
+		else
+			rm $NAME"_unpaired_trim_1.fastq.gz" $NAME"_unpaired_trim_2.fastq.gz"
+		fi
+
+	else #Single-End
+		checkFileExists $FASTQ_PATH".fastq.gz" 
+		printProgress "[trimReads] Trimming $NAME.fastq.gz"
+		$TRIMMOMATIC SE -threads $RUN_THREAD $FASTQ_PATH".fastq.gz" $NAME".fastq.gz" \
+		ILLUMINACLIP:$ILLUMINA_ADAPATORS_ALL":2:30:10" \
+		SLIDINGWINDOW:4:20 \
+		MINLEN:36
+	fi
+
+	printProgress "[trimReads] Finished trimming fastq files for $NAME..."
+	cd $CURRENT_DIRECTORY
+}
+
 
 ### Align fastq files to using data-specific aligner
 ### $1 can be a specific dataset prefix, will only align according to that tag
 function masterAlign () {
-	if $BAM_INPUT; then #if input is BAM alignment is not needed - exit function
+	
+	STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
+	BISMARK_ARGUMENTS="--chunkmbs $BISMARK_MEM -p $BOWTIE_THREAD --bowtie2 --bam $BISMARK_GENOME_DIR " 	# assumes that samtools and bowtie2 are in the path
+	SEARCH_KEY=${1:-$SEARCH_KEY}
+	
+	if $BAM_INPUT; then #if input is BAM for trackhub - exit function
+		setupVariables $SEARCH_KEY
 		return 0
 	fi
 
 	cd $TEMP_DIR
-
-	### Aligner parameters
-	STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
-	BISMARK_ARGUMENTS="--chunkmbs $BISMARK_MEM -p $BOWTIE_THREAD --bowtie2 --bam $BISMARK_GENOME_DIR "
-	SEARCH_KEY=${1:-$SEARCH_KEY}
-
-
-	printProgress "[masterAlign] Started at [$(date)]"
-
+	printProgress "[masterAlign] Starting..."
+#	for FILE in $BAM_FOLDER/*$SEARCH_KEY*fastq.gz; do
 	for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*$SEARCH_KEY*fastq.gz; do
-		determinePairedFastq
+		# maybe rename 
+		setupVariables $FILE
+		trimReads # this is skipped if set to false but nevertheless creates symbolic links of Fastq files into the BAM folder
+		# I don't like this as some applications require custom read trimming (e.g. in PBAT you remove the first 4-8 Ns of each read)
+		# maybe just trim the reads beforehand? In that case, teh function trimReads should take in $1 (SE) or $1 and $2 (PE)
 
 		if [[ $FILE == *"RNA"* ]]; then
 			alignSTAR
@@ -690,29 +565,33 @@ function masterAlign () {
 			alignBismark
 		elif [[ $FILE == *"HiC" ]]; then
 			alignHiCUP
-			continue #for HiC data, you don't need to refine BAM
 		elif $ALLELE_SPECIFIC || $USE_BOWTIE; then
 			alignBowtie2
 		else
 			alignBWA
 		fi
-
-		if $ALLELE_RUN; then #allele specific run will need to do unpacking
-			continue #move onto next set instead of refining the produced RAW BAM
-		fi
-
-		refineBam
-
 	done
-
-	printProgress "[masterAlign] Alignment of $SEARCH_KEY fastq files to $GENOME_BUILD completed at [$(date)]"
+	printProgress "[masterAlign] Alignment of $SEARCH_KEY fastq files to $GENOME_BUILD completed."
 	cd $CURRENT_DIRECTORY
 
-	if [[ $TYPE == "Hi-C" ]]; then
-		exit #for HiC data, the rest of script doesn't need to be run (only to align with download and align with HiCUP"\
-	fi
-
 }
+
+
+function postAlignmentCleanup () {
+	for BAM_FILE_TO_CLEAN in $BAM_FOLDER/*$SEARCH_KEY*raw.bam; do
+		printProgress "[postAlignmentCleanup] Started on $BAM_FILE_TO_CLEAN"
+		if $ALLELE_RUN || [[ $BAM_FILE_TO_CLEAN == *"HiC" ]]; then #allele specific run will need to do unpacking
+			continue #move onto next set instead of refining the produced RAW BAM
+		fi	
+		if [[ $BAM_FILE_TO_CLEAN == *"RRBS"* ]] || [[ $BAM_FILE_TO_CLEAN == *"BSSeq"* ]] || [[ $BAM_FILE_TO_CLEAN == *"PBAT"* ]]; then
+			cleanAndExtractBismark $BAM_FILE_TO_CLEAN
+		else # RNA-seq or ChIP-seq
+			refineBam
+		fi
+	done
+}
+
+
 
 ### Alignment of RNASeq data using STAR
 function alignSTAR () {
@@ -732,31 +611,8 @@ function alignSTAR () {
 	rm -r $SEARCH_KEY*"STAR"*
 }
 
-### Alignment of BSSeq data using Bismark
-function alignBismark () {
-	BISMARK_OUTPUT=$NAME"_bismark_bt2.bam"
 
-	if [[ $NAME == *"PBAT"* ]] ; then
-		BISMARK_ARGUMENTS=$BISMARK_ARGUMENTS"--pbat "
-	else
-		BISMARK_ARGUMENTS=$BISMARK_ARGUMENTS"--non_directional "
-	fi
 
-	if $PAIRED_END; then
-		printProgress "[masterAlign Bismark] Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
-		$BISMARK $BISMARK_ARGUMENTS -1 $FILE_FASTQ1 -2 $FILE_FASTQ2
-		BISMARK_OUTPUT=${BISMARK_OUTPUT//_bismark_bt2.bam/_1_bismark_bt2_pe.bam}
-
-	else #Single-End
-		printProgress "[masterAlign Bismark] Aligning $NAME.fastq.gz to genome..."
-		$BISMARK $BISMARK_ARGUMENTS $FILE_FASTQ
-	fi
-
-	printProgress "[masterAlign Bismark] Alignment completed -> $FILE_RAW_BAM"
-	mv $BISMARK_OUTPUT $FILE_RAW_BAM
-	cleanBismark # ????
-#	rm *report.txt
-}
 
 ### Alignment of HiC data with HiCUP, assumed to be paired end
 function alignHiCUP () {
@@ -836,70 +692,74 @@ function refineBam () {
 	mv $FILE_BAM $BAM_FOLDER
 	printProgress "[refineBAM] Final $FILE_BAM is moved to $BAM_FOLDER."
 
-	rm $FILE_RAW_BAM $FILE_CLEANED_BAM $FILE_SORTED_BAM #remove all the buffer bam files
+#	rm $FILE_RAW_BAM $FILE_CLEANED_BAM $FILE_SORTED_BAM #remove all the buffer bam files
 
 }
+
 
 ### Searches for .bam files containing _Rep#.bam in nested directories and combines them into a single bam
 function collapseReplicates () {
-	cd $TEMP_DIR
+	cd $BAM_FOLDER
 	CURRENT=""
 	printProgress "[collapseReplicates] Started at [$(date)]"
 
-	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
+	for FILE in $BAM_FOLDER/*$SEARCH_KEY*.bam; do
+#	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
 		if [[ $FILE == *_[Rr]ep* ]]; then
-
-			# Julien attempts to rename the MERGED_BAM variable to include the number of merged replicates
-			MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam}
-			printProgress "Tiffany naming: $MERGED_BAM"
+#			MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam} # Tiff naming
 			if [[ $CURRENT != ${FILE//_[Rr]ep*.bam/}*.bam ]]; then
 				CURRENT=$FILE
-				printProgress "[collapseReplicates] Merging to $MERGED_BAM"
-
 				# Julien edits here: rename file and add --write-index to samtools merge
-				REPLICATE_COUNT=$(ls -l ${FILE//_[Rr]ep*.bam/}*.bam | wc -l)
-				printProgress "Julien Rep counts: $REPLICATE_COUNT"
-				MERGED_BAM=${MERGED_BAM//.bam/_"$REPLICATE_COUNT"_.bam}
-				printProgress "Julien new naming: $MERGED_BAM"
-				$SAMTOOLS merge --threads $RUN_THREAD --write-index $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
-
-				if [[ $KEEP_REPLICATES == false ]]; then
-					printProgress "[collapseReplicates] Removing replicates"
-					rm ${FILE//_[Rr]ep*.bam/}_*ep*.bam
-				fi
-
-#				printProgress "[collapseReplicates] Indexing BAM file..."
-#				$SAMTOOLS index ${MERGED_BAM//.bam/}*.bam #index merged & replicates (if available)
-
-				if $KEEP_REPLICATES; then
-					local REP_DIR=$(dirname $FILE)/"Reps"
-					mkdir -p $REP_DIR
-					printProgress "[collapseReplicates] Moving all replicates into $REP_DIR"
-					mv ${MERGED_BAM//.bam/}*_[Rr]ep* $REP_DIR
-					printProgress "[collapseReplicates] Indexing replicates..."
-					$SAMTOOLS index $REP_DIR/${MERGED_BAM//.bam/}*_[Rr]ep*
-				fi
+				local REP_LIST=$(ls ${FILE//_[Rr]ep*.bam/}*.bam)
+	#			local REPLICATE_COUNT=$(ls -l $REP_LIST | wc -l | awk '{print $1}' ) # ISNT THIS SIMPLER?
+				local REPLICATE_COUNT=$(ls -l ${FILE//_[Rr]ep*.bam/}*.bam | wc -l | awk '{print $1}' ) 
+				local MERGED_BAM=${FILE//_[Rr]ep*.bam/_mergedReps1-"$REPLICATE_COUNT".bam}		
+				
+				printProgress "[collapseReplicates] Bam files to merge: $REP_LIST \n[collapseReplicates] Replicate count for $SEARCH_KEY: $REPLICATE_COUNT \n[collapseReplicates] Merged bam file name: $MERGED_BAM"
+	#			$SAMTOOLS merge --threads $RUN_THREAD $MERGED_BAM $REP_LIST #ISNT THIS SIMPLER?
+				$SAMTOOLS merge --threads $RUN_THREAD $MERGED_BAM ${FILE//_[Rr]ep*.bam/}*.bam
+				checkBamFileExists $MERGED_BAM
+				printProgress "[collapseReplicates] Indexing and obtaining stats for replicates..."
+	#			for x in $REP_LIST; do	# ISNT THIS SIMPLER?
+				for x in ${FILE//_[Rr]ep*.bam/}*bam; do
+					$SAMTOOLS index $x
+					trueStats $x
+				done
 			fi
 
-		else
+		else #file does not contain "rep or Rep"
 			printProgress "[collapseReplicates] No replicates for $FILE"
 			MERGED_BAM=$FILE
-			printProgress "[collapseReplicates] Indexing BAM file..."
 			$SAMTOOLS index $MERGED_BAM
+			trueStats $MERGED_BAM
+			checkBamFileExists $MERGED_BAM
 		fi
-
-		printProgress "[collapseReplicates] Obtaining flagstats for $MERGED_BAM flagstats"
-		$SAMTOOLS flagstat $MERGED_BAM | tee -a $LOG_FILE
 	done
 
-#	checkFileExists $MERGED_BAM #this is actually useless as an empty BAM containing only a header will pass this check
-#	checkFileExists "$MERGED_BAM".bai
-	printProgress "[collapseReplicates] All replicates for $SEARCH_KEY has been combined at [$(date)]"
+	printProgress "[collapseReplicates] All replicates for $SEARCH_KEY have been combined at [$(date)]"	
 	cd $CURRENT_DIRECTORY
 }
 
-
-
+# to be run on duplicate-marked BAM files
+# NOT compatible with DNAme data
+function trueStats () {
+	local INPUT_BAM=$1
+	local TRUESTATS_OUTPUT=${INPUT_BAM//.bam/_trueStats.txt}
+	checkFileExists $INPUT_BAM
+	
+	printProgress "[trueStats] Collecting alignment statistics for $INPUT_BAM"
+	echo "" >> $TRUESTATS_OUTPUT
+	echo "$INPUT_BAM trueStats" >> $TRUESTATS_OUTPUT
+	echo "filtering $INPUT_BAM for mapped reads" >> $TRUESTATS_OUTPUT
+	$SAMTOOLS view -b -F 4 $INPUT_BAM > $INPUT_BAM.mapped.bam
+	$SAMTOOLS flagstat $INPUT_BAM.mapped.bam >> $TRUESTATS_OUTPUT
+	echo "" >> $TRUESTATS_OUTPUT
+	echo "filtering $INPUT_BAM for MAPQ >$MIN_MAPQ" >> $TRUESTATS_OUTPUT
+	$SAMTOOLS view -bq "$MIN_MAPQ" $INPUT_BAM.mapped.bam > $INPUT_BAM.mapped.MAPQ.bam
+	$SAMTOOLS flagstat $INPUT_BAM.mapped.MAPQ.bam >> $TRUESTATS_OUTPUT
+	rm $INPUT_BAM.mapped.bam $INPUT_BAM.mapped.MAPQ.bam
+	cat $TRUESTATS_OUTPUT >> $LOG_FILE
+}
 
 
 ### Checking dependencies of the functions
@@ -919,6 +779,7 @@ function checkDependencies () {
 	fi
 }
 
+
 function removeFASTQ () {
 	if [[ $KEEP_FASTQ == false ]]; then
 		echo "Not keeping fastq..."
@@ -931,6 +792,7 @@ function removeFASTQ () {
 
 	fi
 }
+
 
 ###Extract fastq file(s) from all bam within provided directory
 function obtainFastqFromBAM () {
@@ -960,7 +822,469 @@ function obtainFastqFromBAM () {
 }
 
 
+# move all of these to a separate .sh file?
+########################################
+#	DNA METHYLATION DATA FUNCTIONS     #
+########################################
 
+### Alignment of BSSeq data using Bismark
+function alignBismark () {
+	BISMARK_OUTPUT=$NAME"_bismark_bt2.bam"
+	if [[ $NAME == *"PBAT"* ]] ; then
+		BISMARK_ARGUMENTS_LOCAL=$BISMARK_ARGUMENTS"--pbat "
+	else
+		BISMARK_ARGUMENTS_LOCAL=$BISMARK_ARGUMENTS"--non_directional " # uhhhhh are we sure this is correct? shouldn't non-pbat samples simply align with default?
+	fi
+
+	if $PAIRED_END; then
+		# align PE reads
+		printProgress "[masterAlign Bismark] Aligning "$NAME"_1.fastq.gz and "$NAME"_2.fastq.gz to genome..."
+		# -un argument keeps mates that do not align, important for many WGBS libraries
+		$BISMARK $BISMARK_ARGUMENTS_LOCAL -un -1 $BAM_FOLDER/$NAME"_1.fastq.gz" -2 $BAM_FOLDER/$NAME"_2.fastq.gz"
+		BISMARK_OUTPUT=${BISMARK_OUTPUT//_bismark_bt2.bam/_1_bismark_bt2_pe.bam}
+		mv $BISMARK_OUTPUT $BAM_FOLDER/$NAME"_PE_raw.bam"
+		checkBamFileExists $BAM_FOLDER/$NAME"_PE_raw.bam" 
+		
+		# align unaligned reads too!
+		if [[ $TRIM_READ == false ]]; then
+			printProgress "[masterAlign Bismark] Aligning "$NAME" unaligned read 1 to genome..."
+			$BISMARK $BISMARK_ARGUMENTS_LOCAL $BAM_FOLDER/$NAME"_1.fastq.gz_unmapped_reads_1.fq.gz"
+			printProgress "[masterAlign Bismark] Aligning "$NAME" unaligned read 2 to genome..."
+			# do not run with --pbat option if it exists. Run default in order to align to all 4 reference genome strands
+			$BISMARK $BISMARK_ARGUMENTS $BAM_FOLDER/$NAME"_2.fastq.gz_unmapped_reads_2.fq.gz"
+			rm $BAM_FOLDER/$NAME"_1.fastq.gz_unmapped_reads_1.fq.gz" $BAM_FOLDER/$NAME"_2.fastq.gz_unmapped_reads_2.fq.gz"
+
+		else # read trimming occured, combine unpaired reads from trimming and from aligning
+			printProgress "[masterAlign Bismark] Aligning "$NAME" unaligned read 1 and trimmed read 1 to genome..."
+			cat $BAM_FOLDER/$NAME"_unpaired_trim_1.fastq.gz" $BAM_FOLDER/$NAME"_1.fastq.gz_unmapped_reads_1.fq.gz" > $BAM_FOLDER/$NAME"_UNPAIRED_1.fastq.gz"
+			$BISMARK $BISMARK_ARGUMENTS_LOCAL $BAM_FOLDER/$NAME"_UNPAIRED_1.fastq.gz"
+			rm $BAM_FOLDER/$NAME"_unpaired_trim_1.fastq.gz" $BAM_FOLDER/$NAME"_1.fastq.gz_unmapped_reads_1.fq.gz" $BAM_FOLDER/$NAME"_UNPAIRED_1.fastq.gz"
+			# outputs: $BAM_FOLDER/$NAME"_UNPAIRED_1_bismark_bt2.bam"
+			
+			printProgress "[masterAlign Bismark] Aligning "$NAME" unaligned read 2 and trimmed read 2 to genome..."
+			cat $BAM_FOLDER/$NAME"_unpaired_trim_2.fastq.gz" $BAM_FOLDER/$NAME"_2.fastq.gz_unmapped_reads_2.fq.gz" > $BAM_FOLDER/$NAME"_UNPAIRED_2.fastq.gz"
+			# do not run with --pbat option if it exists. Run default in order to align to all 4 reference genome strands
+			$BISMARK $BISMARK_ARGUMENTS $BAM_FOLDER/$NAME"_UNPAIRED_2.fastq.gz"
+			rm $BAM_FOLDER/$NAME"_unpaired_trim_2.fastq.gz" $BAM_FOLDER/$NAME"_2.fastq.gz_unmapped_reads_2.fq.gz" $BAM_FOLDER/$NAME"_UNPAIRED_2.fastq.gz"
+			# outputs: $BAM_FOLDER/$NAME"_UNPAIRED_2_bismark_bt2.bam"
+
+		# combine SE bams
+		printProgress "[masterAlign Bismark] Combining unpaired SE read Bams..."
+		$SAMTOOLS merge --threads $RUN_THREAD $BAM_FOLDER/$NAME"_SE_raw.bam" $BAM_FOLDER/$NAME"_UNPAIRED_1_bismark_bt2.bam" $BAM_FOLDER/$NAME"_UNPAIRED_2_bismark_bt2.bam"
+		rm $BAM_FOLDER/$NAME"_UNPAIRED_1_bismark_bt2.bam" $BAM_FOLDER/$NAME"_UNPAIRED_2_bismark_bt2.bam"
+		fi
+		
+	else #Single-End
+		printProgress "[masterAlign Bismark] Aligning $NAME.fastq.gz to genome..."
+		$BISMARK $BISMARK_ARGUMENTS_LOCAL $BAM_FOLDER/$NAME".fastq.gz"
+		mv $BISMARK_OUTPUT $BAM_FOLDER/$NAME"_SE_raw.bam"
+		checkBamFileExists $BAM_FOLDER/$NAME"_SE_raw.bam" 
+	BISMARK_ARGUMENTS_LOCAL="" # reset variable to avoid compounding it (e.g. --pbat --pbat --pbat in the case of 3 replicate samples)
+	fi
+	
+	collectBismarkAlignmentStats
+	printProgress "[masterAlign Bismark] Alignment of $NAME completed!"
+}
+
+
+function collectBismarkAlignmentStats () {
+	printProgress "[masterAlign Bismark] Concatenating bismark_bt2_report.txt files"
+	echo ""  >> $LOG_FILE
+	echo "Bismark alignment statistics"  >> $LOG_FILE
+	cat $BAM_FOLDER/$NAME*bt2*report.txt >> $LOG_FILE
+}
+
+
+# EXTRACT STEP TAKES A LONG TIME. DO NOT CODE MORE STUFF INTO THIS FUNCTION
+function cleanAndExtractBismark () {
+	# this function is run on all files ending in *raw.bam
+	local CLEANBIS_INPUT=$1
+	cd $BAM_FOLDER
+	
+	printProgress "[cleanAndExtractBismark] Deduplicating reads..."
+	if [[ $CLEANBIS_INPUT == *_PE_* ]]; then
+		if [[ $CLEANBIS_INPUT == *RRBS* ]]; then
+			DEDUPLICATED_BAM=$CLEANBIS_INPUT # it is not recommended to deduplicate reads generated by RRBS
+		else
+			DEDUPLICATED_BAM=${CLEANBIS_INPUT//.bam/.deduplicated.bam}
+			$BISMARK_DEDUPLICATE -p $CLEANBIS_INPUT --bam # outputs file ${FILE_RAW_BAM//.bam/.deduplicated.bam} and ${FILE_RAW_BAM//.bam/.deduplicated_report.txt}
+		fi
+		$BISMARK_METH_EXTRACT -p --multicore $RUN_THREAD --comprehensive --merge_non_CpG --bedGraph --counts --buffer_size $THREAD_MEM --cytosine_report --genome_folder $GENOME_DIR $DEDUPLICATED_BAM
+		#outputs .CpG_report.txt
+		
+	elif [[ $CLEANBIS_INPUT == *_SE_* ]]; then
+		if [[ $CLEANBIS_INPUT == *RRBS* ]]; then
+			DEDUPLICATED_BAM=$CLEANBIS_INPUT
+		else
+			DEDUPLICATED_BAM=${CLEANBIS_INPUT//.bam/.deduplicated.bam}
+			$BISMARK_DEDUPLICATE -s $CLEANBIS_INPUT --bam
+		fi
+		$BISMARK_METH_EXTRACT -s --multicore $RUN_THREAD --comprehensive --merge_non_CpG --bedGraph --counts --buffer_size $THREAD_MEM --cytosine_report --genome_folder $GENOME_DIR $DEDUPLICATED_BAM		
+
+	else 
+		printProgress "[cleanAndExtractBismark] Unknown file type (name should contain SE or PE). Exiting."
+		exit 0
+
+	fi
+	# COLLECT SOME BASIC STATS
+	
+	collectBismarkDuplicationCoverageAndConversionStats $DEDUPLICATED_BAM
+}
+
+
+function collectBismarkDuplicationCoverageAndConversionStats () {
+	local DEDUPLICATED_BAM=$1
+	local BIS_STATS_FILE=${DEDUPLICATED_BAM/.bam/_bisStats.txt}
+	
+	printProgress "[collectBismarkDuplicationCoverageAndConversionStats] Deduplication report for $DEDUPLICATED_BAM"
+	cat ${DEDUPLICATED_BAM//deduplicated.bam/deduplication_report.txt} >> $BIS_STATS_FILE
+	
+	printProgress "[collectBismarkDuplicationCoverageAndConversionStats] Calculating average coverage over $DEDUPLICATED_BAM"
+	echo "Average coverage over $DEDUPLICATED_BAM" >> $BIS_STATS_FILE
+	$SAMTOOLS sort $DEDUPLICATED_BAM > ${DEDUPLICATED_BAM//.bam/.sort.bam}
+	$SAMTOOLS coverage ${DEDUPLICATED_BAM//.bam/.sort.bam} | grep -v "random" | grep -v "Un" >> $BIS_STATS_FILE
+	$SAMTOOLS coverage ${DEDUPLICATED_BAM//.bam/.sort.bam} | grep -v "random" | grep -v "Un" | grep -e "chr[1-9]" | awk '{sum+=$7} END { print "Autosomal avg coverage = ",sum/NR}' >> $BIS_STATS_FILE
+	
+	printProgress "[collectBismarkDuplicationCoverageAndConversionStats] Calculating bisulphite conversion rate"
+	local BAM_DIRNAME=${DEDUPLICATED_BAM%/*}
+	local BAM_BASENAME=$(basename $DEDUPLICATED_BAM)
+	local CPG_CONTEXT=$BAM_DIRNAME/"CpG_context_"${BAM_BASENAME//.bam/.txt}
+	local NON_CPG_CONTEXT=$BAM_DIRNAME/"Non_CpG_context_"${BAM_BASENAME//.bam/.txt}
+	
+	printProgress "[collectBismarkDuplicationCoverageAndConversionStats] Counting the number of lamba methylated (Z) and unmethylated (z) CpGs in $CPG_CONTEXT" >> $BIS_STATS_FILE
+	cat $CPG_CONTEXT | grep -e "J02459.1" | cut -f5 | sort | uniq -c >> $BIS_STATS_FILE
+	printProgress "[bisulphiteStats] Counting the number of lamba methylated (X,H) and unmethylated (x,h) CHGs in $NON_CPG_CONTEXT"  >> $BIS_STATS_FILE
+	cat $NON_CPG_CONTEXT | grep -e "J02459.1" | cut -f5 | sort | uniq -c >> $BIS_STATS_FILE
+	
+	printProgress "[collectBismarkDuplicationCoverageAndConversionStats] Done at [$(date)]"
+	
+}
+
+
+
+### merge a cytosine report into a CpG site report
+function mergeTwoStrandMethylation () {
+	local CPG_REPORT_FILE=$1
+	checkFileExists $CPG_REPORT_FILE
+	printProgress "[mergeTwoStrandMethylation] Started mergeTwoStrandMethylation on $CPG_REPORT_FILE"
+
+	awk '
+	BEGIN {
+			FS = "\t"
+			OFS = "\t"
+
+			CHR = ""
+			FIRST_POS = 0
+			METHYL = 0
+			UNMETHYL = 0
+			FIRST_TRI = ""
+			START = 0
+	}
+	{
+		if ($2 == FIRST_POS || $2 == FIRST_POS + 1) {
+			METHYL += $4
+			UNMETHYL += $5
+		} else {
+			if (START != 0 ) {
+				if (METHYL + UNMETHYL > 0) {
+					printf CHR "\t" FIRST_POS "\t" 
+					printf "%6f\t", METHYL / (METHYL + UNMETHYL) * 100.0
+					print METHYL, UNMETHYL, $6, FIRST_TRI
+				} else {
+					print CHR, FIRST_POS, "NA", METHYL, UNMETHYL, $6, FIRST_TRI
+				}
+			}
+			START = 1
+			CHR = $1
+			FIRST_POS = $2
+			METHYL = $4
+			UNMETHYL = $5
+			FIRST_TRI = $7
+		}
+	}
+	END {
+		if (METHYL + UNMETHYL > 0) {
+			printf CHR "\t" FIRST_POS "\t" 
+			printf "%6f\t", METHYL / (METHYL + UNMETHYL) * 100.0
+			print METHYL, UNMETHYL, $6, FIRST_TRI
+		} else {
+			print CHR, FIRST_POS, "NA", METHYL, UNMETHYL, $6, FIRST_TRI
+		}
+	}' $CPG_REPORT_FILE > ${CPG_REPORT_FILE//.txt/_mergeTwoStrands.txt}
+	checkFileExists ${CPG_REPORT_FILE//.txt/_mergeTwoStrands.txt}
+}
+
+
+function collapseSEPEbismark () {
+	cd $BAM_FOLDER
+	printProgress "[collapseSEPEbismark] Started at [$(date)]"
+	for FILE in $BAM_FOLDER/*$SEARCH_KEY*.CpG_report.txt; do
+		# Combine SE and PE if PE exists
+		if [[ $FILE == *_PE_* ]]; then
+			SE_FILE=${FILE//_PE_/_SE_}
+			# Check if the unpaired SE file exists (PBAT)
+			if [[ -f $SE_FILE ]]; then
+				printProgress "[collapseSEPEbismark] Combining PE + SE files."
+				printProgress "[collapseSEPEbismark] Combining $FILE + $SE_FILE -> ${FILE//_PE_/_SEPE_}"
+				cat $FILE $SE_FILE | sort -k1,1 -k2,2n > ${FILE//_PE_/_SEPE_}
+#				rm  $FILE $SE_FILE
+				#mv uncombined files to temporary folder or they will be combined again. at end of day, rm them
+			else # do not do anything if file is _SE_
+				continue
+			fi
+		fi
+	done
+	printProgress "[collapseSEPEbismark] Done at [$(date)]"
+}
+
+
+function collapseReplicatesBismark () {
+	cd $BAM_FOLDER
+	printProgress "[collapseReplicatesBismark] Started at [$(date)]"
+	CURRENT=""
+	local SUFFIX=".CpG_report.txt"
+	for FILE in $BAM_FOLDER/*$SEARCH_KEY*$SUFFIX; do
+		echo $FILE
+		if [[ $FILE == *_[Rr]ep* ]]; then
+			if [[ $CURRENT != ${FILE//_[Rr]ep*$SUFFIX/}*$SUFFIX ]]; then
+				CURRENT=$FILE
+				local REP_LIST=$( ls ${FILE//_[Rr]ep*$SUFFIX/}*$SUFFIX )
+				local REPLICATE_COUNT=$( ls -l $REP_LIST | wc -l | awk '{print $1}' )
+				local MERGED_CPG_REPORT_TMP=$( echo $REP_LIST | cut -d ' ' -f1 )
+				local MERGED_CPG_REPORT_TMPE=${MERGED_CPG_REPORT_TMP//_[Rr]ep[123456789]_/_} # replace repX with reps1-N
+				local MERGED_CPG_REPORT=${MERGED_CPG_REPORT_TMPE//$SUFFIX/_mergedReps1-"$REPLICATE_COUNT"$SUFFIX}
+				printProgress "[collapseReplicatesBismark] CpG_report.txt files to merge: $REP_LIST \n[collapseReplicatesBismark] Replicate count for $SEARCH_KEY: $REPLICATE_COUNT \n[collapseReplicatesBismark] Merged bam file name: $MERGED_CPG_REPORT"
+				printProgress "[collapseReplicatesBismark] Merging and sorting CpG_report replicates..."
+				# sorting takes about 3 minutes per CpG report on mbp16
+				cat $REP_LIST | sort -k1,1 -k2,2n > $MERGED_CPG_REPORT
+				mergeTwoStrandMethylation $MERGED_CPG_REPORT
+				for x in $REP_LIST; do
+					mergeTwoStrandMethylation $x
+#					rm $x
+				done
+			fi
+		else #file does not contain "rep or Rep"
+			printProgress "[collapseReplicatesBismark] No replicates for $FILE"
+		fi
+	done
+	printProgress "[collapseReplicatesBismark] Done at [$(date)]"
+	
+	
+	
+}	
+
+
+function convertMethylationToBigWig () {
+	local INPUT_CPG_REPORT=$1
+	local VAR_MIN_DEPTH=$2
+	local BIS_STATS_FILE=${INPUT_CPG_REPORT/.txt/_covered_CpG_counts.txt}
+	printProgress "[masterTrackHub] convertMethylationToBigWig on $INPUT_CPG_REPORT -> ${INPUT_CPG_REPORT/.txt/_x$VAR_MIN_DEPTH.bw}"
+
+	awk -v MIN_DEPTH=$VAR_MIN_DEPTH '
+		BEGIN {
+			print "#chr\tstart\tend\tstrand\tvalue"
+			FS = "\t"
+			OFS = "\t"
+			if (MIN_DEPTH < 1)
+				MIN_DEPTH = 1
+		}
+	$5 + $6 >= MIN_DEPTH {
+			print $1, $2, $2+1, $3
+	}' $INPUT_CPG_REPORT >  ${INPUT_CPG_REPORT/.txt/_x$VAR_MIN_DEPTH.bedGraph}
+
+	$BEDGRAPHTOBW ${INPUT_CPG_REPORT/.txt/_x$VAR_MIN_DEPTH.bedGraph} $CHROM_SIZES ${INPUT_CPG_REPORT/.txt/_x$VAR_MIN_DEPTH.bw}
+	# count number of covered CpGs
+	CPG_COUNT=$( grep -v "J02459.1" ${INPUT_CPG_REPORT/.txt/_x$VAR_MIN_DEPTH.bedGraph}  |  wc -l  |  awk '{print $1}' )
+	echo "$CPG_COUNT CpGs covered by $VAR_MIN_DEPTH reads in $INPUT_CPG_REPORT" >> $BIS_STATS_FILE
+#	rm ${INPUT_CPG_REPORT/.txt/_x$VAR_MIN_DEPTH.bedGraph}
+}
+
+
+
+function cleanupBismark  () {
+	
+	printProgress "[cleanupBismark] Moving relevant output files to $CURRENT_DIRECTORY"
+	
+	mkdir -p $CURRENT_DIRECTORY/bigWigs
+	mkdir -p $CURRENT_DIRECTORY/cpg_report
+	mkdir -p $CURRENT_DIRECTORY/stats
+	
+	cd $BAM_FOLDER
+	
+	mv *bw $CURRENT_DIRECTORY/bigWigs/
+	mv *CpG_report_mergeTwoStrands.txt $CURRENT_DIRECTORY/cpg_report/
+	cat $LOG_FILE *bisStats.txt > $CURRENT_DIRECTORY/stats/${LOG_FILE//.txt/_and_stats.txt}
+	
+
+}
+
+
+
+
+#########################################
+#		TRACK-HUB FUNCTIONS		     	#
+#########################################
+
+function masterTrackHub () {
+	
+	BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH_WIN --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates"
+	PRINTED_DIR=""
+	echo $NAME
+	# special little condition for DNAme data
+	if [[ $NAME == *"BSSeq"* ]] || [[ $NAME == *"RRBS"* ]] || [[ $NAME == *"PBAT"* ]]; then
+		
+		for CPG_REPORT_FILE in $BAM_FOLDER/*$SEARCH_KEY*CpG_report_mergeTwoStrands.txt; do
+			convertMethylationToBigWig $CPG_REPORT_FILE 1
+			convertMethylationToBigWig $CPG_REPORT_FILE 2
+			convertMethylationToBigWig $CPG_REPORT_FILE 3
+			convertMethylationToBigWig $CPG_REPORT_FILE 4
+			convertMethylationToBigWig $CPG_REPORT_FILE 5
+			convertMethylationToBigWig $CPG_REPORT_FILE 10
+			convertMethylationToBigWig $CPG_REPORT_FILE 15
+			convertMethylationToBigWig $CPG_REPORT_FILE 20
+		done
+
+
+	# not DNAme
+	else
+
+		for BAM_FILE in $BAM_FOLDER/*$SEARCH_KEY*.bam; do
+#		for BAM_FILE in ./*/*$SEARCH_KEY*.bam; do #currently in $CURRENT_DIRECTORY
+			FOLDER_FILE=${BAM_FILE//.\//} #getting rid of the "./"
+			FILE=$(basename $BAM_FILE) #leaving just the basename of the file
+			FILE_NAME=${FILE//.bam/_}$NORMALIZE ##basename without file extension
+
+			if [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"PBAT"* ]]; then
+				break
+			fi
+
+
+			if [[ $BIN_SIZE != 1 ]] ; then
+				FILE_NAME=$FILE_NAME"_b"$BIN_SIZE
+			fi
+
+			if [[ $SMOOTH_WIN != 0 ]] ; then
+				FILE_NAME=$FILE_NAME"_s"$SMOOTH_WIN
+			fi
+
+			FOLDER_NAME=${FOLDER_FILE%%\/*} #removing longest text of the matching pattern (after "/" in this case)
+
+			if [[ $FOLDER_NAME != $PRINTED_DIR ]] ; then # Create supertrack for housing associated tracks
+				printf "track $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \n\n" | tee -a $TRACKDB
+				PRINTED_DIR=$FOLDER_NAME
+			fi
+
+			FLAG=$($SAMTOOLS view $FOLDER_FILE | head -n 1 | cut -f2)
+			if [[ $((FLAG&1)) == 1 ]] ; then #Paired-end
+				PAIRED=true
+			else
+				PAIRED=false
+			fi
+			
+			echo "Data are Paired-end:" $PAIRED
+
+			if [[ $FILE == *"RNA"* ]]; then
+				generateRNATrack	
+			#ChIPseq - not stranded
+			else
+				generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
+				printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
+			fi
+			
+		rm Actb.bed
+		done
+	fi
+
+}
+
+
+function generateRNATrack () {
+	if [[ $PAIRED == true ]] ; then
+		echo "Extracting F reads over Actb..."
+		$SAMTOOLS view -L Actb.bed -f 64 $FOLDER_FILE > Actb.sam
+	else
+		echo "Extracting reads over Actb..."
+		$SAMTOOLS view -L Actb.bed $FOLDER_FILE > Actb.sam
+	fi
+
+	STRANDED=$(awk 'BEGIN{PLUS=0; MINUS=0} {
+		if( and($2,16) == 16) {
+					MINUS++;
+				} else {
+					PLUS++;
+				}
+			} END{
+				if( MINUS/(MINUS+PLUS) > 0.9) {
+					print "Same-Strand";
+				} else {
+					if( MINUS/(MINUS+PLUS) < 0.1) {
+						print "Opposite-Strand";
+					} else {
+						print "Unstranded";
+					}
+				}
+			}' Actb.sam)
+	rm Actb.sam
+	echo "Data are" $STRANDED
+
+	if [[ $STRANDED == "Unstranded" ]] ; then
+		generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
+		printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
+	else
+		FILE_BIGWIG_POS=$TRACK_FOLDER"$FILE_NAME""_pos.bw"
+		FILE_BIGWIG_NEG=$TRACK_FOLDER"$FILE_NAME""_neg.bw"
+		FILE_BIGWIG_TEMP=$TEMP_DIR"/temp.bw"
+		FILE_BEDGRAPH_TEMP=$TEMP_DIR"/temp.bedgraph"
+		FILE_BEDGRAPH_TEMP2=$TEMP_DIR"/temp2.bedgraph"
+		$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand forward --outFileName $FILE_BIGWIG_POS
+		$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand reverse --outFileName $FILE_BIGWIG_NEG
+		if [[ $STRANDED == "Opposite-Strand" ]] ; then
+			mv $FILE_BIGWIG_NEG $FILE_BIGWIG_TEMP
+			mv $FILE_BIGWIG_POS $FILE_BIGWIG_NEG
+			mv $FILE_BIGWIG_TEMP $FILE_BIGWIG_POS
+		fi
+		bigWigToBedGraph $FILE_BIGWIG_NEG $FILE_BEDGRAPH_TEMP
+		awk -F "\t" 'BEGIN {OFS="\t" } {
+			$4 = 0 - $4;
+			print $1, $2, $3, $4;
+		}' $FILE_BEDGRAPH_TEMP > $FILE_BEDGRAPH_TEMP2
+		mv $FILE_BEDGRAPH_TEMP2 $FILE_BEDGRAPH_TEMP
+		$BEDGRAPHTOBW $FILE_BEDGRAPH_TEMP $CHROM_SIZES $FILE_BIGWIG_NEG
+		rm $FILE_BEDGRAPH_TEMP
+		printTrackHubStranded $FOLDER_NAME $FILE_NAME
+	fi
+}
+
+
+#$1=Name of filtered .bam file $2=Final name
+function generateBigwigsUnstranded () {
+	echo "Generating bigwig files..."
+	$SAMTOOLS index $1
+	$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $1 --outFileName $TRACK_FOLDER"$2.bw"
+
+}
+
+#$1=Supertrack name $2=Track name
+function printTrackHubUnstranded () {
+	printf "\ttrack %s\n\tparent %s\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tbigDataUrl %s\n\tcolor 200,50,0\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tautoScale on\n\talwaysZero on\n\n" $2 $1 $2 $2 $2".bw" | tee -a $TRACKDB
+
+}
+
+#Takes in supertrack name then track name
+function printTrackHubStranded () {
+	printf "\ttrack %s\n\tparent %s\n\tcontainer multiWig\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tconfigurable on\n\tautoScale on\n\talwaysZero on\n\taggregate transparentOverlay\n\tshowSubtrackColorOnUi on\n\tpriority 1.0\n\n" $2 $1 $2 $2 | tee -a $TRACKDB
+	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_pos" $2 $2"_pos" $2"_pos" $2"_pos.bw" | tee -a $TRACKDB
+	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" | tee -a $TRACKDB
+
+}
+	
+	
+	
+	
+	
+	
+	
+	
 ########################################
 #	ALLELE-SPECIFIC FUNCTIONS      #
 ########################################
@@ -1191,154 +1515,163 @@ function prepWigAndProject () {
 
 
 
-########################################
-#	  TRACK-HUB FUNCTIONS	       #
-########################################
 
-function masterTrackHub () {
-	BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH_WIN --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates"
+# DEPRECATED BY JRA JULY 2020. RATIONALE:
+# I think users should know what library type (ChIP, RNA, RRBS, PBAT, MethylSeq)
+# each of the dataset is, and that they should include this info in the filename
 
-	PRINTED_DIR=""
+# Drawbacks:
+# - user friendliness decreased
+# - input files or search keys must abide by a rigid rule (including library type)
 
-	for BAM_FILE in ./*/*$SEARCH_KEY*.bam; do #currently in $CURRENT_DIRECTORY
-		FOLDER_FILE=${BAM_FILE//.\//} #getting rid of the "./"
-		FILE=$(basename $BAM_FILE) #leaving just the basename of the file
-		FILE_NAME=${FILE//.bam/_}$NORMALIZE ##basename without file extension
+# Positives: 
+# - code decreased from 4 functions, 146 lines to 1 function, 54 lines
+# - no longer rely on meta data provided by the authors, which is sometimes incorrect (including PAIRED-ENDEDNESS info)
 
-		if [[ $BIN_SIZE != 1 ]] ; then
-			FILE_NAME=$FILE_NAME"_b"$BIN_SIZE
-		fi
+### Download reads from SRA
+function downloadReads () {
+	DL_COUNTER=0
 
-		if [[ $SMOOTH_WIN != 0 ]] ; then
-			FILE_NAME=$FILE_NAME"_s"$SMOOTH_WIN
-		fi
+	SRACODE=$code
+	NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-		FOLDER_NAME=${FOLDER_FILE%%\/*} #removing longest text of the matching pattern (after "/" in this case)
-
-		if [[ $FOLDER_NAME != $PRINTED_DIR ]] ; then # Create supertrack for housing associated tracks
-			printf "track $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \n\n" | tee -a $TRACKDB
-			PRINTED_DIR=$FOLDER_NAME
-		fi
-
-		FLAG=$($SAMTOOLS view $FOLDER_FILE | head -n 1 | cut -f2)
-		if [[ $((FLAG&1)) == 1 ]] ; then #Paired-end
-			PAIRED=true
-		else
-			PAIRED=false
-		fi
-		echo "Data are Paired-end:" $PAIRED
-
-		if [[ $FILE == *"RNA"* ]]; then
-			generateRNATrack
-		elif [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"PBAT"* ]]; then
-			generateBSTrack
-		else #ChIPseq - not stranded
-			generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
-			printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
-		fi
-
+	printProgress "[masterDownload wget] Downloading $SRACODE to $TEMP_DIR... at [$(date)]"
+	for DL in $($ESEARCH -db sra -query $SRACODE \
+							| $EFETCH --format runinfo \
+							| cut -d ',' -f 10 \
+							| grep https); do
+		wget --no-check-certificate $DL -O $SEARCH_KEY"_"$(basename $DL) & #& this allow the command to run in parallel and in the background 
+		DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
+		((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
 	done
-	rm Actb.bed
+
+	for pid in ${DL_PID_ARRAY[*]}
+	do
+		wait $pid #wait for all downloads to finish
+	done
+
+	printProgress "[masterDownload] Finished $SRACODE -> $NAME reads download."
 }
 
-function generateRNATrack () {
-	if [[ $PAIRED == true ]] ; then
-		echo "Extracting F reads over Actb..."
-		$SAMTOOLS view -L Actb.bed -f 64 $FOLDER_FILE > Actb.sam
-	else
-		echo "Extracting reads over Actb..."
-		$SAMTOOLS view -L Actb.bed $FOLDER_FILE > Actb.sam
+
+
+function extractType() {
+	SRACODE=${1:-$SRACODE} #giving option to just use function to see what type of sequence it is? is this neccessary?
+
+	TYPE=$($ESEARCH -db sra -query $SRACODE \
+				| $EFETCH --format runinfo \
+				| cut -d ',' -f 13 \
+				| tail -n 2 \
+				| head -n 1)
+	printProgress "[masterDownload] Data type: $TYPE"
+
+	if [[ $TYPE == "ChIP-Seq" ]] && \
+		 [[ $NAME != *"ChIP"* ]]; then
+		 NAME="ChIPseq_"$NAME
+
+	elif [[ $TYPE == "RNA-Seq" ]] && \
+			 [[ $NAME != *"RNA"* ]] ; then
+			 MIN_MAPQ=255
+			 NAME="RNAseq_"$NAME
+
+	elif [[ $TYPE == "Bisulfite-Seq" ]] && \
+			 [[ $NAME != *"RRBS"* ]] && \
+			 [[ $NAME != *"BSSeq"* ]] && \
+			 [[ $NAME != *"PBAT"* ]] ; then
+			 NAME="BSSeq_"$NAME
+
+	elif [[ $TYPE == "ATAC-seq" ]] && \
+			 [[ $NAME != *"ATAC"* ]]; then
+			 NAME="ATACSeq_"$NAME
+
+	elif [[ $TYPE == "DNase-Hypersensitivity" ]] && \
+			 [[ $NAME != *"DNase"* ]]; then
+			 NAME="DNase_"$NAME
+
+	elif [[ $TYPE == "Hi-C" ]] && \
+			 [[ $NAME != *"HiC"* ]]; then
+			 NAME="HiC_"$NAME
 	fi
+	printProgress "[masterDownload] Name of data: $NAME"
+}
 
-	STRANDED=$(awk 'BEGIN{PLUS=0; MINUS=0} {
-		if( and($2,16) == 16) {
-					MINUS++;
-				} else {
-					PLUS++;
-				}
-			} END{
-				if( MINUS/(MINUS+PLUS) > 0.9) {
-					print "Same-Strand";
-				} else {
-					if( MINUS/(MINUS+PLUS) < 0.1) {
-						print "Opposite-Strand";
-					} else {
-						print "Unstranded";
-					}
-				}
-			}' Actb.sam)
-	rm Actb.sam
-	echo "Data are" $STRANDED
+### Determine data to be single or paired-end (could be called with just SRACODE)
+function extractPaired () {
+	SRACODE=${1:-$SRACODE}
 
-	if [[ $STRANDED == "Unstranded" ]] ; then
-		generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
-		printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
+	PAIRED=$($ESEARCH -db sra -query $SRACODE \
+					| $EFETCH --format runinfo \
+					| cut -d ',' -f 16 \
+					| tail -n 2 \
+					| head -n 1)
+
+	if [[ $PAIRED == SINGLE ]]; then
+		PAIRED_END=false
+	printProgress "[masterDownload] Data are single-end."
 	else
-		FILE_BIGWIG_POS=$TRACK_FOLDER"$FILE_NAME""_pos.bw"
-		FILE_BIGWIG_NEG=$TRACK_FOLDER"$FILE_NAME""_neg.bw"
-		FILE_BIGWIG_TEMP=$TEMP_DIR"/temp.bw"
-		FILE_BEDGRAPH_TEMP=$TEMP_DIR"/temp.bedgraph"
-		FILE_BEDGRAPH_TEMP2=$TEMP_DIR"/temp2.bedgraph"
-		$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand forward --outFileName $FILE_BIGWIG_POS
-		$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand reverse --outFileName $FILE_BIGWIG_NEG
-		if [[ $STRANDED == "Opposite-Strand" ]] ; then
-			mv $FILE_BIGWIG_NEG $FILE_BIGWIG_TEMP
-			mv $FILE_BIGWIG_POS $FILE_BIGWIG_NEG
-			mv $FILE_BIGWIG_TEMP $FILE_BIGWIG_POS
+		PAIRED_END=true
+	printProgress "[masterDownload] Data are paired-end."
+	fi
+}
+
+
+### Extract fastq using fasterq-dump, compress FASTQ then concatenate FASTQ from same samples
+function extractFastq () {
+	COMPRESS_COUNTER=0
+	COMPRESS_PID_ARRAY=""
+
+	local SEARCH_DL=*$SEARCH_KEY*[DSE]RR*
+
+	printProgress "[masterDownload extractFastq] Dumping fastq files..."
+	for SRA_FILE in $SEARCH_DL; do
+		$FASTERQDUMP -e $RUN_THREAD --split-files ./$SRA_FILE
+	done
+
+	printProgress "[masterDownload extractFastq] Compressing fastq files..." #simultaneously zip all the dump fastq files for that read
+	for DL_FASTQ in $SEARCH_DL*fastq; do
+		gzip $DL_FASTQ &
+		COMPRESS_PID_ARRAY[$COMPRESS_COUNTER]=$!
+		((COMPRESS_COUNTER++))
+	done
+
+	for gzipid in ${COMPRESS_PID_ARRAY[*]}; do
+		wait $gzipid #wait for all gzip to finish
+	done
+
+	printProgress "[masterDownload extractFastq] Concatenating fastq.gz files..."
+	if $PAIRED_END; then
+		COUNT=$(ls -1 $SEARCH_DL*_1.fastq.gz | wc -l)
+		if [[ $COUNT > 1 ]] ; then
+		# JUlien added printProgress and checkFileExists calls here - untested so far (added 6 calls for each)
+		printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*_1.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz""
+			cat $SEARCH_DL*_1.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*_2.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz""
+			cat $SEARCH_DL*_2.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+		else # If only single file, move, don't copy
+		printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*_1.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz""
+			mv $SEARCH_DL*_1.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+		printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*_2.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz""
+			mv $SEARCH_DL*_2.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+		$CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
 		fi
-		bigWigToBedGraph $FILE_BIGWIG_NEG $FILE_BEDGRAPH_TEMP
-		awk -F "\t" 'BEGIN {OFS="\t" } {
-			$4 = 0 - $4;
-			print $1, $2, $3, $4;
-		}' $FILE_BEDGRAPH_TEMP > $FILE_BEDGRAPH_TEMP2
-		mv $FILE_BEDGRAPH_TEMP2 $FILE_BEDGRAPH_TEMP
-		$BEDGRAPHTOBW $FILE_BEDGRAPH_TEMP $CHROM_SIZES $FILE_BIGWIG_NEG
-		rm $FILE_BEDGRAPH_TEMP
-		printTrackHubStranded $FOLDER_NAME $FILE_NAME
+
+	else #Single-End Reads
+		COUNT=$(ls -1 $SEARCH_DL*.fastq.gz | wc -l)
+		if [[ $COUNT > 1 ]] ; then # If only single file, move, don't copy
+			printProgress "[masterDownload extractFastq] Concatenating $SEARCH_DL*.fastq.gz into $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz""
+			cat $SEARCH_DL*.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+			checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+		else
+			printProgress "[masterDownload extractFastq] Renaming $SEARCH_DL*.fastq.gz to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz""
+			mv $SEARCH_DL*.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+			checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+		fi
 	fi
-}
 
-function generateBSTrack () {
-# FILE_BEDGRAPH=$TEMP_DIR/$FILE_NAME".bedGraph"
-	FILE_TEMP_1=$TEMP_DIR"/temp.bam"
-	TEMP_BEDGRAPH=${FILE_TEMP_1//.bam/.bedGraph}
-#		FILE_TEMP_2=$TEMP_DIR"/temp2.bam"
-	echo "Filtering" $FILE "for mapping quality..."
-	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FOLDER_FILE
-	$BISMARK_METH_EXTRACT --gzip --multicore $RUN_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
-#		mv temp2.bedGraph.gz $FILE_BEDGRAPH.gz # TODO probably not correct
-	gunzip $TEMP_BEDGRAPH.gz
-#		grep ^[^\*] $FILE_BEDGRAPH > $TEMP_DIR/temp.bedgraph
-#		mv $TEMP_BEDGRAPH $FILE_BEDGRAPH
-#		sort -k1,1 -k2,2n $TEMP_DIR/temp.bedgraph > $FILE_BEDGRAPH
-#		rm $TEMP_DIR/temp.bedgraph
-	$BEDGRAPHTOBW $TEMP_BEDGRAPH $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME.bw
-	rm $TEMP_BEDGRAPH
-	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
-	rm $FILE_TEMP_1
-	rm $TEMP_DIR/CHG*
-	rm $TEMP_DIR/CHH*
-#	rm $TEMP_DIR/CpG* # keep this file as it is required for Keegan's script
-	rm $TEMP_DIR/$FILE_NAME.*
-#		rm $TEMP_DIR/*.bai
-	#TODO Optional: keep more information? Lots of stuff being discarded
+	printProgress "[masterDownload] Fastq files for $NAME are moved to $CURRENT_DIRECTORY/$FASTQ_DRECTORY"
+	rm $SEARCH_DL
 }
-
-#$1=Name of filtered .bam file $2=Final name
-function generateBigwigsUnstranded () {
-	echo "Generating bigwig files..."
-	$SAMTOOLS index $1
-	$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $1 --outFileName $TRACK_FOLDER"$2.bw"
-}
-
-#$1=Supertrack name $2=Track name
-function printTrackHubUnstranded () {
-	printf "\ttrack %s\n\tparent %s\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tbigDataUrl %s\n\tcolor 200,50,0\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tautoScale on\n\talwaysZero on\n\n" $2 $1 $2 $2 $2".bw" | tee -a $TRACKDB
-}
-
-#Takes in supertrack name then track name
-function printTrackHubStranded () {
-	printf "\ttrack %s\n\tparent %s\n\tcontainer multiWig\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tconfigurable on\n\tautoScale on\n\talwaysZero on\n\taggregate transparentOverlay\n\tshowSubtrackColorOnUi on\n\tpriority 1.0\n\n" $2 $1 $2 $2 | tee -a $TRACKDB
-	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_pos" $2 $2"_pos" $2"_pos" $2"_pos.bw" | tee -a $TRACKDB
-	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" | tee -a $TRACKDB
-	}

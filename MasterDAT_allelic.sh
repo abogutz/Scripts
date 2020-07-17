@@ -2,8 +2,8 @@
 
 #SBATCH --account=def-mlorincz           # required
 #SBATCH --nodes=1                        # cores distributed in # of nodes
-#SBATCH --ntasks-per-node=32              # number of MPI processes
-#SBATCH --mem=120G                        # total memory; default unit is megabytes
+#SBATCH --ntasks-per-node=8              # number of MPI processes
+#SBATCH --mem=84G                        # total memory; default unit is megabytes
 #SBATCH --time=00-1:00                  # time (DD-HH:MM)
 
 # High-level script that calls functions from SRAtoBW_functions.sh
@@ -14,7 +14,7 @@
 ### USER ACTION REQUIRED ###
 #Provide full path to where Github Scripts directory is located
 #Please ensure functions, MasterDAT.sh and config files are within same directory (don't move them!)
-SCRIPTS_DIR=/home/jra/bin/Scripts
+SCRIPTS_DIR=/Users/jra/bin/scriptiff
 
 ### USER ACTION REQUIRED ###
 #Choose the correct config file specific to the server you are currently using (see SCRIPTS_DIR for config files)
@@ -22,7 +22,7 @@ source $SCRIPTS_DIR/jrambp.config
 source $SCRIPTS_DIR/SRAtoBW_functions.sh
 SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0)
 
-# WHY NOT SET PARAMETERS HERE???
+
 
 
 ############### PIPELINE ###############
