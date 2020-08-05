@@ -72,7 +72,6 @@ sbatch ~/bin/Scripts/MasterDAT.sh -k -r -T -f ./Fastq -x C57BL6JxSPRET_14wk_Fema
 
 
 
-
 Troubleshooting
 
 Issue: Output files have names 'study*fastq.gz'
@@ -84,3 +83,18 @@ Problem2: You input FASTQs that did not end in exactly ".fastq.gz".
 Issue: Folder containing output files does not exist
 Problem: You forgot to add "_studyAndYear" to your filename, causing the script to not create a new directory
 Solution example: myfile_RNAseq_rep1.fastq.gz --> myfile_RNAseq_Batten2019_rep1.fastq.gz
+
+
+
+For developers:
+SRA000001	BB_GVO_H3K4me3_ChIP_Batten2019_rep1
+
+Where
+
+BB_GVO_H3K4me3_ChIP_Batten2019_rep1
+[----------------------------] 		$SEARCH_KEY "-x"
+[---------------------------------] 	$USER_INPUT_NAME
+                    [--------] 		$NEW_TEMP_DIR_NAME
+Or
+
+~/bin/scriptiff/MasterDAT_testing.sh -f ~/bioinf/fastq/subsets_for_testing -x BB_GVO_H3K4me3_ChIP_Batten2019 -r

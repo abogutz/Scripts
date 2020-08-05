@@ -11,19 +11,18 @@ SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0)
 parseOptions $@ # parse options from command line to this function
 checkPseudogenome
 parallelRun
-setUp
+setUpLogFile
 
 masterDownload
 masterAlign
 postAlignmentCleanup
 
 collapseSEPEbismark
+collectBismarkStats
 collapseReplicatesBismark
 
-
 masterTrackHub #convert bam to bigWigs and create TrackHub hierarchy
-
-
+cleanupBismark
 
 
 # OUTPUTS
@@ -32,7 +31,7 @@ masterTrackHub #convert bam to bigWigs and create TrackHub hierarchy
 	# PE and SE alignment statistics
 	# PE and SE bams
 	# PE and SE deduplicated bams
-	# PE and SE CpG_report.txt
+	# PE and SE CpG_report.txt (move to VOID)
 	# PE and SE coverage
 	# PE and SE bisulphite conversion rate
 	# SEPE mergeTwoStrands CpG report (for Keegan K's DMR finder)
