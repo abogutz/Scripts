@@ -27,7 +27,7 @@ chmod +x bigWigAverageOverBed
 
 3. Clone this repository from github onto server.
 (Personally like to keep it at a location where I usually work in so I can access the script easily. Alternatively add it to your path.)
-git clone https://github.com/tiffyl/Scripts.git
+git clone https://github.com/abogutz/Scripts.git
 
 4. Open the config file and complete all the USER ACTION.
 
