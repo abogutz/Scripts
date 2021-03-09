@@ -404,7 +404,7 @@ function downloadReads () {
 							| $EFETCH -format runinfo \
 							| cut -d ',' -f 10 \
 							| grep https); do			
-		wget --no-check-certificate $DL -O $SEARCH_KEY"_"$(basename $DL) & #& this allow the command to run in parallel and in the background 
+		wget -q --no-check-certificate $DL -O $SEARCH_KEY"_"$(basename $DL) & #& this allow the command to run in parallel and in the background 
 		DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
 		((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
 	done
