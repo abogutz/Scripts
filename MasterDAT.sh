@@ -6,7 +6,8 @@
 #SBATCH --mail-user=<email address>
 #SBATCH --mail-type=ALL
 
-
+# TODO
+# [ ] Compress fastq files as they're dumped, rather than waiting for all to dump before compressing
 
 ###From tab-delimited file with SRACODE & NAME of dataset
 ###All the data are first downloaded, then trimmed (optional), and aligned 
