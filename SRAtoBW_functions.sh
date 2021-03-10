@@ -487,6 +487,7 @@ function extractFastq () {
 	printProgress "[masterDownload extractFastq] Dumping fastq files..."
 	for SRA_FILE in $SEARCH_DL; do
 		$FASTERQDUMP -e $RUN_THREAD --split-files ./$SRA_FILE
+		rm $SRA_FILE
 	done
 
 	printProgress "[masterDownload extractFastq] Compressing fastq files..." #simultaneously zip all the dump fastq files for that read
