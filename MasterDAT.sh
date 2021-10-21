@@ -15,14 +15,14 @@
 ### USER ACTION REQUIRED ###
 #Provide full path to where Github Scripts directory is located
 #Please ensure functions, MasterDAT.sh and config files are within same directory (don't move them!)
-SCRIPTS_DIR=/project/def-mlorincz/tleung/Scripts
+SCRIPTS_DIR="/project/def-mlorincz/scripts/"
 
 #############################################
 
 ### USER ACTION REQUIRED ###
 #Choose the correct config file specific to the server you are currently using (see SCRIPTS_DIR for config files)
-source $SCRIPTS_DIR/ComputeCanada.config
-source $SCRIPTS_DIR/SRAtoBW_functions.sh
+source $SCRIPTS_DIR"ComputeCanada.config"
+source $SCRIPTS_DIR"SRAtoBW_functions.sh"
 SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0)
 
 ############### PIPELINE ###############
