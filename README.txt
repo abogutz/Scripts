@@ -11,8 +11,6 @@ Open the config file and complete all the USER ACTION.
 Open the MasterDAT.sh and complete all the USER ACTION.
 
 
-
-
 Also, edit the top of the script with the corresponding submission requirement. 
 Fill in any <> spaces with your own information.
 
