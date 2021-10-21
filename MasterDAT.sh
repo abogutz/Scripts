@@ -15,7 +15,7 @@
 ### USER ACTION REQUIRED ###
 #Provide full path to where Github Scripts directory is located
 #Please ensure functions, MasterDAT.sh and config files are within same directory (don't move them!)
-SCRIPTS_DIR="/project/def-mlorincz/scripts/"
+SCRIPTS_DIR="/project/def-mlorincz/scripts/MasterDAT/"
 
 #############################################
 
