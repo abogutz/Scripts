@@ -27,8 +27,8 @@ FASTQ_INPUT=false
 FASTQ_ONLY=false
 KEEP_FASTQ=false
 KEEP_REPLICATES=false
-LOCAL_RUN=false
-SEP_PARA=false
+#LOCAL_RUN=false
+#SEP_PARA=false
 STRANDED_ALLELIC=false
 TRIM_READ=false
 USE_BOWTIE=false
@@ -38,13 +38,13 @@ BIN_SIZE=1
 FLAG=1540 #read unmapped, read fails platform/vendor quality checks, read is PCR or optical duplicate 
 GENOME_BUILD="mm10"
 MIN_MAPQ=5
-NORMALIZE="CPM"
+NORMALIZE="CPM" # TODO Should this be BPM (aka TPM) for RNAseq data?
 SMOOTH_WIN=0
 
 DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$TRIMMOMATIC" $STAR $BISMARK $BOWTIE2 $BWA $SAMTOOLS "$PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
-OPTIONS="hi:ab:B:d:Df:Fg:kLm:M:n:N:ors:t:Tux:X"
+OPTIONS="hi:ab:B:d:Df:Fg:kLm:M:n:N:ors:t:Tux"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
@@ -64,7 +64,6 @@ HELP_FULL="\n$HELP\n
 -F\tOnly output .fastq files.\n\t
 -g\tGenome build for alignment. Allowable: mm9, mm10, rn5, rn6,\n\t\toryCun2, mesAur1, or hg19. Default=mm10\n\t
 -k\tKeep .fastq files when done.\n\t
--L\tRunning script on a local computer rather than a server.\n\t
 -m\tMemory to give each thread (Format=XG/M).\n\t
 -M\tMinimum mapping quality for bigwig generation. Default=5\n\t
 -n\tBin size for bigwig generation. Larger bins to smooth noisy\n\t\tdata. Default=1\n\t
@@ -74,8 +73,13 @@ HELP_FULL="\n$HELP\n
 -t\tNumber of Threads to use. Default=6 (Check in config file)\n\t
 -T\tTrim .fastq files after download.\n\t
 -u\tChanging ChIPseq aligner to bowtie2. Default=BWA\n\t
--w\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t
--x\tSpecify search key of data to use if want to apply pipeline on \n\t\tspecific set of data when entering pipeline through fastq or bam.\n\t"
+-w\tSmoothing window. Will smooth bigwigs in a rolling window of\n\t\tthis size. Default=0\n\t"
+
+#-L\tRunning script on a local computer rather than a server.\n\t
+#-x\tSpecify search key of data to use if want to apply pipeline on \n\t\tspecific set of data when entering pipeline through fastq or bam.\n\t
+#-X\t?\n\t
+
+#TODO -x option; -X option?!?
 
 
 
@@ -97,8 +101,8 @@ function parseOptions () {
 				exit
 				;;
 			i) #set input file
-				SEP_PARA=true
-				PASS_ARG=$@
+#				SEP_PARA=true
+#				PASS_ARG=$@
 				FILENAME=${OPTARG}
 				;;
 			a)
@@ -108,7 +112,7 @@ function parseOptions () {
 				BAM_INPUT=true
 				KEEP_REPLICATES=true
 				if $FASTQ_ONLY ; then
-					echo -e "ERROR:\tIncompatible options. Cannot generate .fastq files from .bam files."
+					echo -e "ERROR:\tIncompatible options - track hub generation downstream of bam input." 
 					exit 1
 				fi
 				;;
@@ -120,7 +124,8 @@ function parseOptions () {
 				TEMP_DIR=${OPTARG}
 				;;
 			D)
-				DEPEND=1
+				checkDependencies
+				exit
 				;;
 			f) #use existing fastq files for downstream modules in pipeline (will skip download)
 				FASTQ_INPUT=true
@@ -134,7 +139,7 @@ function parseOptions () {
 			F) #Stop pipeline after downloading
 				FASTQ_ONLY=true
 				if $BAM_INPUT ; then
-					echo -e "ERROR:\tIncompatible options. Cannot generate .fastq files from .bam files."
+					echo -e "ERROR:\tIncompatible options. Cannot generate .fastq files from .bam files." # TODO this definitely isn't true
 					exit 1
 				fi
 				;;
@@ -144,9 +149,9 @@ function parseOptions () {
 			k) #keep fastq files after alignment
 				KEEP_FASTQ=true
 				;;
-			L)
-				LOCAL_RUN=true
-				;;
+#			L)
+#				LOCAL_RUN=true
+#				;;
 			m)
 				THREAD_MEM=${OPTARG}
 				;;
@@ -181,13 +186,13 @@ function parseOptions () {
 			w)
 				SMOOTH_WIN=${OPTARG}
 				;;
-			x)
-				SEP_PARA=false
-				SEARCH_KEY=${OPTARG}
-				;;
-			X)
-				CODE_ARRAY=$(echo $@ | sed 's/.*-X //')
-				;;
+#			x)
+#				SEP_PARA=false
+#				SEARCH_KEY=${OPTARG}
+#				;;
+#			X)
+#				CODE_ARRAY=$(echo $@ | sed 's/.*-X //') #TODO wtf is this doing ANSWER: apparently repopulating CODE_ARRAY give an input array.
+#				;;
 			\?)
 				echo -e "\n###############\nERROR: Invalid Option! \nTry '$(basename $0) -h' for help.\n###############" >&2
 				exit 1
@@ -195,30 +200,30 @@ function parseOptions () {
 		esac
 	done
 
-	if $SEP_PARA; then
+#	if $SEP_PARA; then
 		checkDependencies
 		setGenome $GENOME_BUILD
-	fi
+#	fi
 }
 
 ###Set up log file for runs
 function setUp () {
-	if [[ $SEP_PARA == false ]]; then 
-		if [[ -z $SEARCH_KEY ]]; then
+#	if [[ $SEP_PARA == false ]]; then 
+	#	if [[ -z $SEARCH_KEY ]]; then
 			#without a search term associated with a -f or -b command, the logfiles might be messy (written to same logfile)
 			#using a random number in placement to avoid confusion
-			LOG_FILE=$CURRENT_DIRECTORY/$RANDOM"_"$(date '+%y-%m-%d')"_log.txt"
-		else
-			LOG_FILE=$CURRENT_DIRECTORY/$SEARCH_KEY"_"$(date '+%y-%m-%d')"_log.txt"
-		fi
+	#		LOG_FILE=$CURRENT_DIRECTORY/$RANDOM"_"$(date '+%y-%m-%d')"_log.txt"
+	#	else
+			LOG_FILE=$CURRENT_DIRECTORY/$(date '+%y-%m-%d')"_log.txt"
+	#	fi
 
 		printProgress "[setUp] Starting Script"
-		printProgress "[setUp] Search key for the set: $SEARCH_KEY"
+#		printProgress "[setUp] Search key for the set: $SEARCH_KEY"
 		printProgress "[setUp] SRA array: $CODE_ARRAY"
 		checkDependencies
 		printProgress "[setUp] All required dependencies are found"
 		setGenome $GENOME_BUILD
-	fi
+#	fi
 }
 
 function printProgress () {
@@ -234,31 +239,21 @@ function checkFileExists () {
 
 ### Create neccessary files for reference genome
 function setGenome () {
-	GENOME_BUILD=$1
-	local FOUND_GENOME=false
+#	GENOME_BUILD=$1
 
-	#check that the directory exist here (fill in function)
-#	if not found (echo -e "ERROR: \t$1 is not a valid genome build. Enter -h for help."
-#			exit 1)
-
-	for ASSEMBLY in $GENOME_DIR/*; do #searching for folder with name of both haplotypes
-		if [[ $(basename $ASSEMBLY) == $GENOME_BUILD ]]; then
+	#check that the directory exist here
+	if [[ -d $GENOME_DIR/$GENOME_BUILD ]]; then
 			GENOME_DIR=$GENOME_DIR/$GENOME_BUILD
-			FOUND_GENOME=true
-			if [[ $SEP_PARA == false ]]; then
+#			if [[ $SEP_PARA == false ]]; then
 				printProgress "[setGenome] Genome used for data is $GENOME_BUILD"
 				printProgress "[setGenome] Path to genome directory: $GENOME_DIR"
-			fi
-			break
-		fi
-	done
-
-	if [[ $FOUND_GENOME == false ]]; then
+#			fi
+	else
 		echo -e "Genome entered is invalid, please check reference genome folder."
 		exit
 	fi
 
-### USER ACTION REQUIRED ###
+
 #Specify location of the following files & directories if layout is not as example
 #The $GENOME_DIR specified in this location, already includes the specific species
 	CHROM_SIZES=$GENOME_DIR/$GENOME_BUILD".sizes"
@@ -277,6 +272,8 @@ function setGenome () {
 	checkFileExists $GENOME_FILE
 	checkFileExists $ACTB_BED
 
+
+#TODO why is the track hub being made in this function?
 	if [[ $FASTQ_ONLY == false ]] ; then
 		mkdir -p $TRACK_HUB_DIR
 
@@ -291,59 +288,59 @@ function setGenome () {
 }
 
 ### Create subset of SRACODE array to be used in parallel running
-function parallelRun () {
-	if $SEP_PARA; then
-		echo -e "Separating input file into subsets for parallel runs..."
+# TODO Why is this so complicated and opaque?
+# function parallelRun () {
+	# if $SEP_PARA; then
+		# echo -e "Separating input file into subsets for parallel runs..."
 
-		INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
-		createCodeArray
-		CURRENT_SET=""
+		# INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
+		# createCodeArray
+		# CURRENT_SET=""
 	
-		for code in $CODE_ARRAY; do
-			SRACODE=$code
-			NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
+		# for code in $CODE_ARRAY; do
+			# SRACODE=$code
+			# NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-			if [[ $NAME == *_[Rr]ep* ]] ; then
-				if [[ $CURRENT_SET != ${NAME//_[Rr]ep*/}* ]]; then
-					CURRENT_SET=${NAME//_[Rr]ep*/}
-					declare -a SUB_ARRAY=$(grep -e $CURRENT_SET $INPUT_FILE | cut -f1)
-					echo "calling "$(basename $SHELL_SCRIPT) "on" $CURRENT_SET
+			# if [[ $NAME == *_[Rr]ep* ]] ; then
+				# if [[ $CURRENT_SET != ${NAME//_[Rr]ep*/}* ]]; then
+					# CURRENT_SET=${NAME//_[Rr]ep*/}
+					# declare -a SUB_ARRAY=$(grep -e $CURRENT_SET $INPUT_FILE | cut -f1)
+					# echo "calling "$(basename $SHELL_SCRIPT) "on" $CURRENT_SET
 					
-					if $LOCAL_RUN; then
-						$SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY & 
-						wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
-					else
-						echo "Submitting on server"
-						DATE=$(date '+%y-%m-%d')
-						$SERVER_SUBMIT "MasterDAT_"$DATE"_"$CURRENT_SET $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY
-						sleep 10 #pause before running next code 
-					fi
+					# if $LOCAL_RUN; then
+						# $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY & 
+						# wait $! #wait for the script above to finish running before moving onto the next set (avoid overload)
+					# else
+						# echo "Submitting on server"
+						# DATE=$(date '+%y-%m-%d')
+						# $SERVER_SUBMIT "MasterDAT_"$DATE"_"$CURRENT_SET $SHELL_SCRIPT $PASS_ARG -x $CURRENT_SET -X $SUB_ARRAY
+						# sleep 10 #pause before running next code 
+					# fi
 
-				fi
+				# fi
 
-			else
-				declare -a SUB_ARRAY=$SRACODE
-				echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
+			# else
+				# declare -a SUB_ARRAY=$SRACODE
+				# echo "calling "$(basename $SHELL_SCRIPT) "on" $NAME
 
-				if $LOCAL_RUN ; then
-					$SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
-					wait $!
-				else
-					echo "Submitting on server"
-					DATE=$(date '+%y-%m-%d')
-					$SERVER_SUBMIT "MasterDAT_"$DATE"_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
-					sleep 10
-				fi
+				# if $LOCAL_RUN ; then
+					# $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+					# wait $!
+				# else
+					# echo "Submitting on server"
+					# DATE=$(date '+%y-%m-%d')
+					# $SERVER_SUBMIT "MasterDAT_"$DATE"_"$NAME $SHELL_SCRIPT $PASS_ARG -x $NAME -X $SUB_ARRAY
+					# sleep 10
+				# fi
+#
+#			fi
+#		done
+#		exit #exit the script b/c don't want to run the rest of the code on every single SRACODE again
+#	fi
 
-			fi
-		done
-		exit #exit the script b/c don't want to run the rest of the code on every single SRACODE again
-	fi
-
-}
+#}
 
 ### Downloading files specified from the tab-delimited file to fastq files
-### When calling function by itself $1=SRA input file
 function masterDownload () {
 	if $BAM_INPUT || $FASTQ_INPUT; then #if input is either BAM/FASTQ then no download is needed - exit masterDownload function
 		return 0
@@ -357,24 +354,27 @@ function masterDownload () {
 
 	INPUT_FILE=$CURRENT_DIRECTORY/$FILENAME
 	
-	if [[ -z $CODE_ARRAY ]]; then #this will basically only be used if the function was called by itself (may delete later)
-		INPUT_FILE=$CURRENT_DIRECTORY/$F1
-		createCodeArray
-	fi
+### Create an array of SRACODE passed listed in the tab-delimited file
+
+	while read n; do #read command will read a line of and split them into words (2 words in files)
+		declare -a m=($n) #-a for an array m to be stored based on the line (SRACODE, NAME)
+		CODE_ARRAY=$CODE_ARRAY" "${m[0]} #add only SRACODE to this list
+	done < $INPUT_FILE #feeding FILE as stdin to this while read
+
 	
 	cd $TEMP_DIR
 
 	printProgress "[masterDownload] Starting..."
 
-	for code in $CODE_ARRAY; do
-		downloadReads
+	for CODE in $CODE_ARRAY; do
+		downloadReads $CODE
 		extractType
 		extractPaired
 		extractFastq
 	done
 	cd $CURRENT_DIRECTORY
 
-	printProgress "[masterDownload] All fastq files for $SEARCH_KEY is downloaded."
+	printProgress "[masterDownload] All fastq files are downloaded."
 
 	if $FASTQ_ONLY; then
 		printProgress "[masterDownload] Fastq files only. Exit script."
@@ -382,29 +382,23 @@ function masterDownload () {
 	fi
 }
  
-### Create an array of SRACODE passed listed in the tab-delimited file
-function createCodeArray () {
-	while read n; do #read command will read a line of and split them into words (2 words in files)
-		declare -a m=($n) #-a for an array m to be stored based on the line (SRACODE, NAME)
-		CODE_ARRAY=$CODE_ARRAY" "${m[0]} #add only SRACODE to this list
-	done < $INPUT_FILE #feeding FILE as stdin to this while read
-}
+
 
 
 ### Download reads from SRA
 function downloadReads () {
 	DL_COUNTER=0
 
-	SRACODE=$code
+	SRACODE=$1
 	NAME=$(grep -e $SRACODE $INPUT_FILE | cut -f2)
 
-	sleep $(( $RANDOM % 300 )) #sleep for random (between 0 and 300) seconds
+#	sleep $(( $RANDOM % 300 )) #sleep for random (between 0 and 300) seconds TODO WHYYyyyyy
 	printProgress "[masterDownload wget] Downloading $SRACODE to $TEMP_DIR..."
 	for DL in $($ESEARCH -db sra -query $SRACODE \
 							| $EFETCH -format runinfo \
 							| cut -d ',' -f 10 \
 							| grep https); do			
-		wget -q --no-check-certificate $DL -O $SEARCH_KEY"_"$(basename $DL) & #& this allow the command to run in parallel and in the background 
+		wget -q --no-check-certificate $DL & #& this allow the command to run in parallel and in the background 
 		DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
 		((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
 	done
@@ -482,7 +476,7 @@ function extractFastq () {
 	COMPRESS_COUNTER=0
 	COMPRESS_PID_ARRAY=""
 
-	local SEARCH_DL=*$SEARCH_KEY*[DSE]RR*
+	local SEARCH_DL="*[DSE]RR*"
 
 	printProgress "[masterDownload extractFastq] Dumping fastq files..."
 	for SRA_FILE in $SEARCH_DL; do
@@ -534,7 +528,7 @@ function extractFastq () {
 }
 
 ### Trim fastq files for adaptors using trimmomatic
-### Could be called with $1=directory that holds fastq files
+### Could be called with $1=directory that holds fastq files TODO Could it?
 function trimReads () {
 	if [[ $TRIM_READ == false || -z $1 ]]; then #exit script if not needed
 		printProgress "[trimReads] Reads not trimmed."
@@ -544,7 +538,7 @@ function trimReads () {
 	cd $TEMP_DIR
 	printProgress "[trimReads] Starting..."
 		
-	for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*$SEARCH_KEY*fastq.gz; do
+	for FILE in $CURRENT_DIRECTORY/${1:-$FASTQ_DIRECTORY}/*fastq.gz; do
 		determinePairedFastq
 
 		if [[ $PAIRED_END ]]; then
@@ -636,7 +630,6 @@ function determinePairedFastq () {
 }
 
 ### Align fastq files to using data-specific aligner
-### $1 can be a specific dataset prefix, will only align according to that tag
 function masterAlign () {
 	if $BAM_INPUT; then #if input is BAM for trackhub - exit function
 		return 0
@@ -649,9 +642,9 @@ function masterAlign () {
 
 	#here kinda assumes that samtools and bowtie2 are both in the path, or else you will need to specify their path here
 	BISMARK_ARGUMENTS="--temp_dir $TEMP_DIR --gzip --chunkmbs $BISMARK_MEM -p $BOWTIE_THREAD --bowtie2 --bam $BISMARK_GENOME_DIR"
-	SEARCH_KEY=${1:-$SEARCH_KEY}
+#	SEARCH_KEY=${1:-$SEARCH_KEY}
 
-	for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*$SEARCH_KEY*fastq.gz; do
+	for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*fastq.gz; do
 		determinePairedFastq
 
 		if [[ $FILE == *"RNA"* ]]; then
@@ -677,7 +670,7 @@ function masterAlign () {
 		
 	done
 
-	printProgress "[masterAlign] Alignment of $SEARCH_KEY fastq files to $GENOME_BUILD completed."
+	printProgress "[masterAlign] Alignment of fastq files to $GENOME_BUILD completed."
 
 	cd $CURRENT_DIRECTORY
 
@@ -707,7 +700,7 @@ function alignSTAR () {
 
 	mv $NAME"Log.final.out" $CURRENT_DIRECTORY
 	rm $NAME*"out"*
-	rm -r $SEARCH_KEY*"STAR"*
+	rm -r *"STAR"*
 }
 
 ### Alignment of BSSeq data using Bismark
@@ -739,13 +732,13 @@ function alignHiCUP () {
 	ENZYME=$(grep -e $NAME $INPUT_FILE | cut -f5 | head -n 1) 
 
 	if [[ -z $ENZYME ]]; then
-		printProgress "[masterAlign HiCUP] ERROR:\tDigestion enzyme was not entered for $SEARCH_KEY HiC dataset..."
+		printProgress "[masterAlign HiCUP] ERROR:\tDigestion enzyme was not entered for HiC dataset..."
 		exit 1
 	fi
 		
 	printProgress "[masterAlign HiCUP] Digesting $GENOME_BUILD with $ENZYME"
-	hicup_digester --re1 $ENYZME --outdir $TEMP_DIR --genome $GENOME_BUILD"_"$SEARCH_KEY $GENOME_FILE
-	local DIGEST_FILE=$(ls $TEMPDIR/Digest*$SEARCH_KEY*)
+	hicup_digester --re1 $ENYZME --outdir $TEMP_DIR --genome $GENOME_BUILD $GENOME_FILE
+	local DIGEST_FILE=$(ls $TEMPDIR/Digest*)
 
 	printProgress "[masterAlign HiCUP] Aligning $NAME to $GENOME_BUILD"
 	$HICUP --zip --bowtie2 $BOWTIE2 --digest $DIGEST_FILE --index $GENOME_DIR/$GENOME_BUILD --outdir $BAM_FOLDER --temp $TEMP_DIR --threads $RUN_THREAD $NAME"_1.fastq.gz" $NAME"_2.fastq.gz"
@@ -823,7 +816,7 @@ function collapseReplicates () {
 	CURRENT=""
 	printProgress "[collapseReplicates] Starting..."
 	
-	for FILE in $CURRENT_DIRECTORY/*/*$SEARCH_KEY*.bam; do
+	for FILE in $CURRENT_DIRECTORY/*/*.bam; do
 		if [[ $FILE == *_[Rr]ep* ]]; then 
 			MERGED_BAM=${FILE//_[Rr]ep*.bam/.bam}
 			
@@ -863,7 +856,7 @@ function collapseReplicates () {
 		
 	done
 
-	printProgress "[collapseReplicates] All replicates for $SEARCH_KEY has been combined."
+	printProgress "[collapseReplicates] All replicates have been combined."
 
 	cd $CURRENT_DIRECTORY
 }
@@ -890,12 +883,7 @@ function removeFASTQ () {
 	if [[ $KEEP_FASTQ == false ]]; then
 		echo "Not keeping fastq..."
 		local FASTQ_DIR=$CURRENT_DIRECTORY/$FASTQ_DIRECTORY
-		rm $FASTQ_DIR/*$SEARCH_KEY*fastq.gz
-
-		if [[ $(ls -1 $FASTQ_DIR | wc -l) == 0 ]]; then #if the Fastq directory is empty, then it is removed
-			rm -r $FASTQ_DIR
-		fi
-
+		rm -r $FASTQ_DIR
 	fi
 }
 
@@ -904,7 +892,7 @@ function extractFastqFromBAM () {
 	cd $TEMP_DIR
 	printProgress "[extractFastqFromBAM] Starting..."
 	
-	for BAM_INPUT in $CURRENT_DIRECTORY/${1:-$BAM_REALIGNMENT_DIRECTORY}/*$SEARCH_KEY*.bam; do
+	for BAM_INPUT in $CURRENT_DIRECTORY/${1:-$BAM_REALIGNMENT_DIRECTORY}/*.bam; do
 		BAM_NAME=$(basename $BAM_INPUT)
 		local TEMP="temp"
 		local SORTED="temp_sorted_"$BAM_NAME
@@ -941,11 +929,11 @@ function extractFastqFromBAM () {
 
 
 ########################################
-#			 ALLELE-SPECIFIC FUNCTIONS			 #
+#			 ALLELE-SPECIFIC FUNCTIONS			 # TODO move these into separate file
 ########################################
 
 function checkPseudogenome () {
-	if $ALLELE_SPECIFIC && $SEP_PARA ; then
+	if $ALLELE_SPECIFIC  ; then
 
 		cd $TEMP_DIR
 		
@@ -957,7 +945,7 @@ function checkPseudogenome () {
 			HAPLO_2=${CROSS##*_}
 
 			if [[ -z $HAPLO_1 || -z $HAPLO_2 ]]; then
-				echo -e "ERROR:\t One of your samples only have 1 haplotype entered. \nPlease ensure to enter both haplotypes of allele pipeline" 
+				echo -e "ERROR:\t One of your samples only has 1 haplotype entered. \nPlease enter both haplotypes of allele pipeline" 
 				EXIT_SCRIPT=true
 				continue #continue to next iteration of cross
 			fi
@@ -996,7 +984,7 @@ function checkPseudogenome () {
 }
 
 function setPseudogenome () {
-	NAME=$SEARCH_KEY
+#	NAME=$SEARCH_KEY TODO this is probably broken now, will fix when allelic alignments needed
 	printProgress "[setPseudogenome] Starting..."
 	
 	HAPLO_1=$(grep -e $NAME $INPUT_FILE | cut -f3 | head -n 1)
@@ -1032,7 +1020,7 @@ function unpackAllelic () { #working on bam that has already aligned to the pseu
 	
 	printProgress "[unpackAllelic] Unpacking for $HAPLO"
 	
-	for TOT_RAW_BAM in $TEMP_DIR/$SEARCH_KEY*"_raw.bam"; do #should be in replicates (NAME1_rep1_raw.bam)
+	for TOT_RAW_BAM in $TEMP_DIR/*"_raw.bam"; do #should be in replicates (NAME1_rep1_raw.bam)
 #take SAM file, align to pseudogenome
 #split header into two, to separate the reads into two haplotypes, rename chr from hap1_chr to chr
 		NAME_HAPLO_SUFFIX=$SEARCH_KEY"_"$HAPLO"_q$MIN_MAPQ"${TOT_RAW_BAM//$SEARCH_KEY/} #inserting haplotype name (-> NAME1_HAPLO_qMINMAPQ_rep1_raw.bam)
@@ -1172,7 +1160,7 @@ function prepWigAndProject () {
 
 
 ########################################
-#					TRACK-HUB FUNCTIONS				 #
+#					TRACK-HUB FUNCTIONS				   #
 ########################################
 
 function masterTrackHub () {
@@ -1182,7 +1170,7 @@ function masterTrackHub () {
 
 	printProgress "[masterTrackHub] Starting..."
 	
-	for BAM_FILE in ./*/*$SEARCH_KEY*.bam; do #currently in $CURRENT_DIRECTORY
+	for BAM_FILE in ./*/*.bam; do #currently in $CURRENT_DIRECTORY
 		FOLDER_FILE=${BAM_FILE//.\//} #getting rid of the "./"
 		FILE=$(basename $BAM_FILE) #leaving just the basename of the file
 		FILE_NAME=${FILE//.bam/_}$NORMALIZE ##basename without file extension
