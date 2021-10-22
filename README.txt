@@ -43,9 +43,5 @@ SRA1.2	NAME1_rep2
 SRA2.1	NAME2_Rep1
 SRA2.2	NAME2_Rep2
 
-2. Run MasterDAT.sh in the current directory with options.
-EXAMPLE:
-../Scripts/MasterDAT.sh -i INPUT_FILE.txt -k
 
-The shell script will separate the input file into different subsets and submit the different subsets onto the server itself.
-The scripts waits 30 seconds between each submission.
+
