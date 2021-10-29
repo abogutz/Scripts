@@ -903,7 +903,7 @@ function extractFastqFromBAM () {
 		$SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $SORTED -n $BAM_INPUT
 
 		printProgress "[extractFastqFromBAM] Extracting reads from $SORTED..."
-		$BAM2FASTQ -o $OUTPUT $SORTED
+		$BAM2FASTQ -o $OUTPUT $SORTED # TODO Is this how bamToFastq works?
 		rm $SORTED
 
 		printProgress "[extractFastqFromBAM] Compressing and moving extracted fastq file(s)..."

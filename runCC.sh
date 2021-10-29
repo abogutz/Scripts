@@ -9,8 +9,8 @@
 
 
 # Modify these to whatever you want
-INPUT_FILE=
-GENOME=
+INPUT_FILE=""
+GENOME="mm10"
 
 # Many other options exist for MasterDAT.sh, run with -h option to see all of them
 
