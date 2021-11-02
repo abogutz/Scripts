@@ -2,6 +2,8 @@
 
 ###List of functions that can be used in various pipelines for download, align and creating track hub
 
+# TODO is temporary directory used at all?
+
 ##System Specific Configuration
 
 #Only if you ever plan on using these functions directly in the command line (otherwise ignore)
@@ -838,7 +840,7 @@ function collapseReplicates () {
 					local REP_DIR=$(dirname $FILE)/"Reps" 
 					mkdir -p $REP_DIR
 					printProgress "[collapseReplicates] Moving all replicates into $REP_DIR"
-					mv ${MERGED_BAM//.bam/}*_[Rr]ep* $REP_DIR
+					mv ${MERGED_BAM//.bam/}*_[Rr]ep* $REP_DIR # TODO pretty sure this doesn't work this way
 				fi
 			fi
 			
@@ -861,7 +863,7 @@ function collapseReplicates () {
 	cd $CURRENT_DIRECTORY
 }
 
-### Checking dependencies of the functions
+### Checking dependencies of the functions TODO not sure this works with java dependencies properly
 function checkDependencies () {
 	echo -e "[checkDependencies] Checking Dependencies"
 	EXIT=0
