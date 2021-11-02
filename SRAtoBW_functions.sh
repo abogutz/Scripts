@@ -201,8 +201,8 @@ function parseOptions () {
 	done
 
 #	if $SEP_PARA; then
-		checkDependencies
-		setGenome $GENOME_BUILD
+#		checkDependencies
+#		setGenome $GENOME_BUILD
 #	fi
 }
 
