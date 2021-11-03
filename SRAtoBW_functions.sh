@@ -2,7 +2,7 @@
 
 ###List of functions that can be used in various pipelines for download, align and creating track hub
 
-# TODO is temporary directory used at all?
+# TODO 2021-11-03 BAM files created under user group, not lab group on Graham
 
 ##System Specific Configuration
 
@@ -275,17 +275,7 @@ function setGenome () {
 	checkFileExists $ACTB_BED
 
 
-#TODO why is the track hub being made in this function?
-	if [[ $FASTQ_ONLY == false ]] ; then
-		mkdir -p $TRACK_HUB_DIR
 
-		printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./$TRACK_HUB_DIR/hub.txt
-
-		TRACK_FOLDER=$TRACK_HUB_DIR/$GENOME_BUILD
-		mkdir -p $TRACK_FOLDER
-		TRACKDB=$TRACK_FOLDER/"trackDb.txt"
-		printf "genome "$GENOME_BUILD"\ntrackDb "$GENOME_BUILD"/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt		
-	fi
 
 }
 
@@ -647,7 +637,7 @@ function masterAlign () {
 #	SEARCH_KEY=${1:-$SEARCH_KEY}
 
 	for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*fastq.gz; do
-		determinePairedFastq
+		determinePairedFastq # Assigns Fastq names
 
 		if [[ $FILE == *"RNA"* ]]; then
 			alignSTAR
@@ -1166,6 +1156,19 @@ function prepWigAndProject () {
 ########################################
 
 function masterTrackHub () {
+
+
+
+	mkdir -p $TRACK_HUB_DIR
+
+	printf "hub <HubNameWithoutSpace>\nshortLabel <max 17 char, display on side>\nlongLabel Hub to display <fill> data at UCSC\ngenomesFile genomes.txt\nemail <email-optional>" > ./$TRACK_HUB_DIR/hub.txt
+
+	TRACK_FOLDER=$TRACK_HUB_DIR/$GENOME_BUILD
+	mkdir -p $TRACK_FOLDER
+	TRACKDB=$TRACK_FOLDER/"trackDb.txt"
+	printf "genome "$GENOME_BUILD"\ntrackDb "$GENOME_BUILD"/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt		
+
+	
 	BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH_WIN --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates"
 
 	PRINTED_DIR=""
