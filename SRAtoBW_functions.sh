@@ -263,6 +263,7 @@ function setGenome () {
 	ACTB_BED=$GENOME_DIR/$GENOME_BUILD"_Actb.bed"
 
 	STAR_GENOME_DIR=$GENOME_DIR/$GENOME_BUILD"-STAR"
+	STAR_SJ_DB=$GENOME_DIR/$GENOME_BUILD"-NCBIRefSeq.gtf"
 	BISMARK_GENOME_DIR=$GENOME_DIR
 	BOWTIE2_INDEXES=$GENOME_DIR/$GENOME_BUILD
 
@@ -630,7 +631,7 @@ function masterAlign () {
 	cd $TEMP_DIR
 	printProgress "[masterAlign] Starting..."
 	
-	STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
+	STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --sjdbGTFfile $STAR_SJ_DB --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
 
 	#here kinda assumes that samtools and bowtie2 are both in the path, or else you will need to specify their path here
 	BISMARK_ARGUMENTS="--temp_dir $TEMP_DIR --gzip --chunkmbs $BISMARK_MEM -p $BOWTIE_THREAD --bowtie2 --bam $BISMARK_GENOME_DIR"
