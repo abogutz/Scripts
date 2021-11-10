@@ -4,8 +4,8 @@
 #############################################
 
 #Choose the correct config file specific to the server you are currently using (see SCRIPTS_DIR for config files)
-source $SCRIPTS_DIR"ComputeCanada.config"
-source $SCRIPTS_DIR"SRAtoBW_functions.sh"
+source "ComputeCanada.config"
+source "SRAtoBW_functions.sh"
 # SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0) #TODO still needed?
 
 ############### PIPELINE ###############

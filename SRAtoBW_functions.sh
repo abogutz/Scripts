@@ -8,12 +8,12 @@
 
 #Only if you ever plan on using these functions directly in the command line (otherwise ignore)
 #Ensure correct config file if using
-if [[ -z $SCRIPTS_DIR ]]; then
-	pushd $(dirname $0) > /dev/null
-	SCRIPTS_DIR=$(pwd -P)
-	popd > /dev/null
-	source $SCRIPTS_DIR/BRC.config
-fi
+#if [[ -z $SCRIPTS_DIR ]]; then
+	# pushd $(dirname $0) > /dev/null
+	# SCRIPTS_DIR=$(pwd -P)
+	# popd > /dev/null
+	# source $SCRIPTS_DIR/BRC.config
+# fi
 
 
 ## Non System Specific Variables
@@ -126,6 +126,7 @@ function parseOptions () {
 				TEMP_DIR=${OPTARG}
 				;;
 			D)
+				loadModules
 				checkDependencies
 				exit
 				;;
@@ -856,6 +857,7 @@ function collapseReplicates () {
 
 ### Checking dependencies of the functions TODO not sure this works with java dependencies properly
 function checkDependencies () {
+	
 	echo -e "[checkDependencies] Checking Dependencies"
 	EXIT=0
 	for COMMAND in "${DEPENDENCIES[@]}"; do
