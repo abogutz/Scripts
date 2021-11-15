@@ -34,6 +34,7 @@ KEEP_REPLICATES=false
 STRANDED_ALLELIC=false
 TRIM_READ=false
 USE_BOWTIE=false
+CHECK_DEPEND=false
 
 CODE_ARRAY=""
 BIN_SIZE=1
@@ -126,8 +127,7 @@ function parseOptions () {
 				TEMP_DIR=${OPTARG}
 				;;
 			D)
-				loadModules
-				checkDependencies
+				CHECK_DEPEND=true
 				exit
 				;;
 			f) #use existing fastq files for downstream modules in pipeline (will skip download)
@@ -220,10 +220,14 @@ function setUp () {
 			LOG_FILE=$CURRENT_DIRECTORY/$(date '+%y-%m-%d')"_log.txt"
 	#	fi
 
+		checkDependencies		
+		if [[ $CHECK_DEPEND == "true" ]]; then
+			exit
+		fi
+
 		printProgress "[setUp] Starting Script"
 #		printProgress "[setUp] Search key for the set: $SEARCH_KEY"
 		printProgress "[setUp] SRA array: $CODE_ARRAY"
-		checkDependencies
 		printProgress "[setUp] All required dependencies are found"
 		setGenome $GENOME_BUILD
 #	fi
