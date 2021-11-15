@@ -44,7 +44,6 @@ MIN_MAPQ=5
 NORMALIZE="CPM" # TODO Should this be BPM (aka TPM) for RNAseq data?
 SMOOTH_WIN=0
 
-DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$TRIMMOMATIC" $STAR $BISMARK $BOWTIE2 $BWA $SAMTOOLS "$PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 # Help Menu
 OPTIONS="hi:ab:B:d:Df:Fg:kLm:M:n:N:ors:t:Tux"
@@ -210,6 +209,7 @@ function parseOptions () {
 
 ### Checking dependencies of the functions TODO not sure this works with java dependencies properly
 function checkDependencies () {
+	DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$TRIMMOMATIC" $STAR $BISMARK $BOWTIE2 $BWA $SAMTOOLS "$PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 	echo -e "[checkDependencies] Checking Dependencies"
 	EXIT=0
