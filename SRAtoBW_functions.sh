@@ -208,6 +208,24 @@ function parseOptions () {
 #	fi
 }
 
+### Checking dependencies of the functions TODO not sure this works with java dependencies properly
+function checkDependencies () {
+	
+	echo -e "[checkDependencies] Checking Dependencies"
+	EXIT=0
+	for COMMAND in "${DEPENDENCIES[@]}"; do
+		echo -e "[checkDependencies] $COMMAND..."
+		command -v $COMMAND > /dev/null 2>&1 || {
+			echo -e >&2 "\t\t$COMMAND not found!"
+			EXIT=1
+		}
+	done
+
+	if [[ $EXIT = 1 ]] ; then
+		exit 1
+	fi
+}
+
 ###Set up log file for runs
 function setUp () {
 #	if [[ $SEP_PARA == false ]]; then 
@@ -856,24 +874,6 @@ function collapseReplicates () {
 	printProgress "[collapseReplicates] All replicates have been combined."
 
 	cd $CURRENT_DIRECTORY
-}
-
-### Checking dependencies of the functions TODO not sure this works with java dependencies properly
-function checkDependencies () {
-	
-	echo -e "[checkDependencies] Checking Dependencies"
-	EXIT=0
-	for COMMAND in "${DEPENDENCIES[@]}"; do
-		echo -e "[checkDependencies] $COMMAND..."
-		command -v $COMMAND > /dev/null 2>&1 || {
-			echo -e >&2 "\t\t$COMMAND not found!"
-			EXIT=1
-		}
-	done
-
-	if [[ $EXIT = 1 || $DEPEND = 1 ]] ; then
-		exit 1
-	fi
 }
 
 ###Remove downloaded fastq files unless specified
