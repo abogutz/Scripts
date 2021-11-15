@@ -210,9 +210,7 @@ function parseOptions () {
 
 ### Checking dependencies of the functions TODO not sure this works with java dependencies properly
 function checkDependencies () {
-	
-	echo "EBROOTPICARD:"$EBROOTPICARD
-	echo "PICARD_DIR:"$PICARD_DIR
+
 	echo -e "[checkDependencies] Checking Dependencies"
 	EXIT=0
 	for COMMAND in "${DEPENDENCIES[@]}"; do
