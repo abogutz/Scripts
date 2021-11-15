@@ -128,7 +128,6 @@ function parseOptions () {
 				;;
 			D)
 				CHECK_DEPEND=true
-				exit
 				;;
 			f) #use existing fastq files for downstream modules in pipeline (will skip download)
 				FASTQ_INPUT=true

@@ -4,8 +4,8 @@
 #############################################
 
 #Choose the correct config file specific to the server you are currently using (see SCRIPTS_DIR for config files)
-source /project/def-mlorincz/scripts/MasterDAT/"ComputeCanada.config"
-source /project/def-mlorincz/scripts/MasterDAT/"SRAtoBW_functions.sh"
+source $HOME/project/scripts/MasterDAT/"ComputeCanada.config"
+source $HOME/project/scripts/MasterDAT/"SRAtoBW_functions.sh"
 # SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0) #TODO still needed?
 
 ############### PIPELINE ###############
