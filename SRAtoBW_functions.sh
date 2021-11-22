@@ -431,7 +431,7 @@ function extractType() {
 	SRACODE=${1:-$SRACODE} #giving option to just use function to see what type of sequence it is? is this neccessary?
 
 	TYPE=$($ESEARCH -db sra -query $SRACODE \
-				| $EFETCH --format runinfo \
+				| $EFETCH -format runinfo \
 				| cut -d ',' -f 13 \
 				| tail -n 2 \
 				| head -n 1)
@@ -472,7 +472,7 @@ function extractPaired () {
 	SRACODE=${1:-$SRACODE}
 
 	PAIRED=$($ESEARCH -db sra -query $SRACODE \
-					| $EFETCH --format runinfo \
+					| $EFETCH -format runinfo \
 					| cut -d ',' -f 16 \
 					| tail -n 2 \
 					| head -n 1)
