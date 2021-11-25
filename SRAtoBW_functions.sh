@@ -433,8 +433,8 @@ function extractType() {
 	TYPE=$($ESEARCH -db sra -query $SRACODE \
 				| $EFETCH -format runinfo \
 				| cut -d ',' -f 13 \
-				| tail -n 2 \
-				| head -n 1)
+				| head -n 2 \
+				| tail -n 1)
 	printProgress "[masterDownload] Data type: $TYPE"
 
 	if [[ $TYPE == "ChIP-Seq" ]] && \
@@ -474,8 +474,8 @@ function extractPaired () {
 	PAIRED=$($ESEARCH -db sra -query $SRACODE \
 					| $EFETCH -format runinfo \
 					| cut -d ',' -f 16 \
-					| tail -n 2 \
-					| head -n 1)
+					| head -n 2 \
+					| tail-n 1)
 
 	if [[ $PAIRED == SINGLE ]]; then
 		PAIRED_END=false

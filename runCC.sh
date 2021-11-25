@@ -16,10 +16,10 @@ MEM_THREAD="4G"
 
 # Many other options exist for MasterDAT.sh, run with -h option to see all of them
 
-~/project/scripts/MasterDAT/MasterDAT.sh -i $SRA_FILE -g $GENOME -t $THREADS -m $MEM_THREAD 
+$HOME/projects/def-mlorincz/scripts/MasterDAT/MasterDAT.sh -i $SRA_FILE -g $GENOME -t $THREADS -m $MEM_THREAD 
 
-#~/project/scripts/MasterDAT/MasterDAT.sh -t $THREADS -m $MEM_THREAD -f ./Fastq -g $GENOME # Fastq input - will use .fastq.gz files located in ./Fastq (can change). Name format is very important
+#$HOME/projects/def-mlorincz/scripts/MasterDAT/MasterDAT.sh -t $THREADS -m $MEM_THREAD -f ./Fastq -g $GENOME # Fastq input - will use .fastq.gz files located in ./Fastq (can change). Name format is very important
 
-#~/project/scripts/MasterDAT/MasterDAT.sh -t $THREADS -m $MEM_THREAD -b -g $GENOME # BAM file input - will find ALL bam files in subdirectories of current location (one level down)
+#$HOME/projects/def-mlorincz/MasterDAT/MasterDAT.sh -t $THREADS -m $MEM_THREAD -b -g $GENOME # BAM file input - will find ALL bam files in subdirectories of current location (one level down)
 
-#~/project/scripts/MasterDAT/MasterDAT.sh -t $THREADS -m $MEM_THREAD -i $SRA_FILE -g $GENOME -F # Only produce fastq files after downloading
+#$HOME/projects/def-mlorincz/MasterDAT/MasterDAT.sh -t $THREADS -m $MEM_THREAD -i $SRA_FILE -g $GENOME -F # Only produce fastq files after downloading
