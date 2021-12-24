@@ -475,7 +475,7 @@ function extractPaired () {
 					| $EFETCH -format runinfo \
 					| cut -d ',' -f 16 \
 					| head -n 2 \
-					| tail-n 1)
+					| tail -n 1)
 
 	if [[ $PAIRED == SINGLE ]]; then
 		PAIRED_END=false
