@@ -409,14 +409,15 @@ function downloadReads () {
 
 #	sleep $(( $RANDOM % 300 )) #sleep for random (between 0 and 300) seconds TODO WHYYyyyyy
 	printProgress "[masterDownload wget] Downloading $SRACODE to $TEMP_DIR..."
-	for DL in $($ESEARCH -db sra -query $SRACODE \
-							| $EFETCH -format runinfo \
-							| cut -d ',' -f 10 \
-							| grep https); do			
-		wget -q --no-check-certificate $DL & #& this allow the command to run in parallel and in the background 
-		DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
-		((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
-	done
+#	for DL in $($ESEARCH -db sra -query $SRACODE \ 
+#							| $EFETCH -format runinfo \
+#							| cut -d ',' -f 10 \
+#							| grep https); do			
+#		wget -q --no-check-certificate $DL & #& this allow the command to run in parallel and in the background  TODO might have to change this to prefetch
+	prefetch -O $TEMP_DIR $SRACODE &
+	DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
+	((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
+#	done
 		
 	for pid in ${DL_PID_ARRAY[*]}
 	do
@@ -490,17 +491,18 @@ function extractPaired () {
 function extractFastq () { 
 	COMPRESS_COUNTER=0
 	COMPRESS_PID_ARRAY=""
+	CODE=$1
 
-	local SEARCH_DL="*[DSE]RR*"
+#	local SEARCH_DL="*[DSE]RR*"
 
 	printProgress "[masterDownload extractFastq] Dumping fastq files..."
-	for SRA_FILE in $SEARCH_DL; do
-		$FASTERQDUMP -e $RUN_THREAD --split-files ./$SRA_FILE
+	for SRA_FILE in $CODE/*.sra; do
+		$FASTERQDUMP -e $RUN_THREAD --split-files $SRA_FILE
 		rm $SRA_FILE
 	done
 
 	printProgress "[masterDownload extractFastq] Compressing fastq files..." #simultaneously zip all the dump fastq files for that read
-	for DL_FASTQ in $SEARCH_DL*fastq; do 
+	for DL_FASTQ in *.fastq; do 
 		gzip $DL_FASTQ & 
 		COMPRESS_PID_ARRAY[$COMPRESS_COUNTER]=$!
 		((COMPRESS_COUNTER++))
@@ -512,13 +514,13 @@ function extractFastq () {
 
 	printProgress "[masterDownload extractFastq] Concatenating fastq.gz files..."
 	if $PAIRED_END; then
-		COUNT=$(ls -1 $SEARCH_DL*_1.fastq.gz | wc -l)
+		COUNT=$(ls -1 *_1.fastq.gz | wc -l)
 		if [[ $COUNT > 1 ]] ; then 
-			cat $SEARCH_DL*_1.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
-			cat $SEARCH_DL*_2.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+			cat *_1.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+			cat *_2.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
 		else # If only single file, move, don't copy
-			mv $SEARCH_DL*_1.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
-			mv $SEARCH_DL*_2.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
+			mv *_1.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_1.fastq.gz"
+			mv *_2.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
 		fi
 
 		#checkpoint: fastq files have been moved correctly
@@ -526,11 +528,11 @@ function extractFastq () {
 		checkFileExists $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME"_2.fastq.gz"
  
 	else #Single-End Reads
-		COUNT=$(ls -1 $SEARCH_DL*.fastq.gz | wc -l)
+		COUNT=$(ls -1 *.fastq.gz | wc -l)
 		if [[ $COUNT > 1 ]] ; then # If only single file, move, don't copy
-			cat $SEARCH_DL*.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+			cat *.fastq.gz > $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
 		else
-			mv $SEARCH_DL*.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
+			mv *.fastq.gz $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/$NAME".fastq.gz"
 		fi
 
 		#checkpoint: fastq files have been moved correctly
@@ -539,7 +541,8 @@ function extractFastq () {
 	fi
 
 	printProgress "[masterDownload] Fastq files for $NAME are moved to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY"
-	rm $SEARCH_DL
+	rm *.fastq
+	rm -r $CODE
 }
 
 ### Trim fastq files for adaptors using trimmomatic
