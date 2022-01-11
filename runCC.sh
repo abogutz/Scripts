@@ -1,6 +1,6 @@
 #! /bin/bash
 #SBATCH --account=<Group Name>            # required (format def-name)
-#SBATCH --cpus-per-task=8                        # number of MPI processes
+#SBATCH --cpus-per-task=8                        # number of cpus
 #SBATCH --mem-per-cpu=4G                 # memory; default unit is megabytes
 #SBATCH --time=01-12:00                   # time (DD-HH:MM)
 #SBATCH --mail-user=<email address>
