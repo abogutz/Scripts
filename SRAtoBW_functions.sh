@@ -385,7 +385,7 @@ function masterDownload () {
 		downloadReads $CODE
 		extractType
 		extractPaired
-		extractFastq
+		extractFastq $CODE
 	done
 	cd $CURRENT_DIRECTORY
 
