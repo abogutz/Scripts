@@ -414,7 +414,7 @@ function downloadReads () {
 #							| cut -d ',' -f 10 \
 #							| grep https); do			
 #		wget -q --no-check-certificate $DL & #& this allow the command to run in parallel and in the background  TODO might have to change this to prefetch
-	prefetch -O $TEMP_DIR $SRACODE &
+	prefetch -X 100G -O $TEMP_DIR $SRACODE &
 	DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
 	((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
 #	done
