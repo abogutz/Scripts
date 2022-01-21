@@ -383,10 +383,12 @@ function masterDownload () {
 
 	for CODE in $CODE_ARRAY; do
 		downloadReads $CODE
+		$ESEARCH -db sra -query $CODE | $EFETCH -format runinfo > "temp.txt" # Reduce the number of times we query NCBI servers
 		extractType
 		extractPaired
 		extractFastq $CODE
 	done
+	rm "temp.txt"
 	cd $CURRENT_DIRECTORY
 
 	printProgress "[masterDownload] All fastq files are downloaded."
@@ -414,7 +416,7 @@ function downloadReads () {
 #							| cut -d ',' -f 10 \
 #							| grep https); do			
 #		wget -q --no-check-certificate $DL & #& this allow the command to run in parallel and in the background  TODO might have to change this to prefetch
-	prefetch -X 100G -O $TEMP_DIR $SRACODE &
+	$PREFETCH -X 100G -O $TEMP_DIR $SRACODE &
 	DL_PID_ARRAY[$DL_COUNTER]=$! #$! = the last process that was started
 	((DL_COUNTER++)) #add one to the counter so next thing added to the array will be in the next position
 #	done
@@ -431,8 +433,7 @@ function downloadReads () {
 function extractType() {
 	SRACODE=${1:-$SRACODE} #giving option to just use function to see what type of sequence it is? is this neccessary?
 
-	TYPE=$($ESEARCH -db sra -query $SRACODE \
-				| $EFETCH -format runinfo \
+	TYPE=$(cat "temp.txt" \
 				| cut -d ',' -f 13 \
 				| head -n 2 \
 				| tail -n 1)
@@ -472,8 +473,7 @@ function extractType() {
 function extractPaired () {
 	SRACODE=${1:-$SRACODE}
 
-	PAIRED=$($ESEARCH -db sra -query $SRACODE \
-					| $EFETCH -format runinfo \
+	PAIRED=$(cat "temp.txt" \
 					| cut -d ',' -f 16 \
 					| head -n 2 \
 					| tail -n 1)
@@ -491,12 +491,12 @@ function extractPaired () {
 function extractFastq () { 
 	COMPRESS_COUNTER=0
 	COMPRESS_PID_ARRAY=""
-	CODE=$1
+	#CODE=$1
 
 #	local SEARCH_DL="*[DSE]RR*"
 
 	printProgress "[masterDownload extractFastq] Dumping fastq files..."
-	for SRA_FILE in $CODE/*.sra; do
+	for SRA_FILE in */*.sra; do
 		$FASTERQDUMP -e $RUN_THREAD --split-files $SRA_FILE
 		rm $SRA_FILE
 	done

@@ -8,6 +8,7 @@ PROJECT_DIR="/project/def-mlorincz/"
 source $PROJECT_DIR/scripts/MasterDAT/"ComputeCanada.config"
 source $PROJECT_DIR/scripts/MasterDAT/"SRAtoBW_functions.sh"
 # SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0) #TODO still needed?
+export NCBI_API_KEY=e0a9648272551712054923626410c9135506 #This API key belongs to Aaron, and allows more unfettered access to NCBI servers
 
 ############### PIPELINE ###############
 
