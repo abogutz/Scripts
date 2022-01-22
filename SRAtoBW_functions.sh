@@ -177,6 +177,9 @@ function parseOptions () {
 				;;
 			t)
 				RUN_THREAD=${OPTARG}
+				if [[ $RUN_THREAD > 1 ]] ; then
+					(((RUN_THREAD--))
+				fi
 				;;
 			T) #trimming fastq by default parameters
 				TRIM_READ=true
