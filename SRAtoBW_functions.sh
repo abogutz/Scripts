@@ -859,7 +859,7 @@ function collapseReplicates () {
 					local REP_DIR=$(dirname $FILE)/"Reps" 
 					mkdir -p $REP_DIR
 					printProgress "[collapseReplicates] Moving all replicates into $REP_DIR"
-					mv ${MERGED_BAM//.bam/}*_[Rr]ep* $REP_DIR # TODO pretty sure this doesn't work this way
+					mv ${MERGED_BAM//.bam/}*_[Rr]ep* $REP_DIR 
 				fi
 			fi
 			
