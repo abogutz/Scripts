@@ -240,12 +240,6 @@ function setUp () {
 			LOG_FILE=$CURRENT_DIRECTORY/$(date '+%y-%m-%d')"_log.txt"
 	#	fi
 	
-	NUM=${THREAD_MEM//[MG]/}
-	SCALE=${THREAD_MEM//*[0-9]/}
-	let MEM=$RUN_THREAD*$NUM
-	MEM=$MEM$SCALE
-	JAVA_XMX="-Xmx$MEM"
-	JAVA="java -jar $JAVA_XMS $JAVA_XMX"
 
 		checkDependencies		
 		if [[ $CHECK_DEPEND == "true" ]]; then
