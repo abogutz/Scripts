@@ -819,7 +819,7 @@ function refineBam () {
 	$PICARD CleanSam I=$FILE_RAW_BAM O=$FILE_CLEANED_BAM
 
 	printProgress "[refineBAM] Sorting by coordinates..."
-	$SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $FILE_SORTED_BAM -T $NAME $FILE_CLEANED_BAM
+	$SAMTOOLS sort -@ $RUN_THREAD -m $SORT_MEM -o $FILE_SORTED_BAM -T $NAME $FILE_CLEANED_BAM
 		
 	printProgress "[refineBAM] Marking duplicates..." #not removing the duplicates
 	$PICARD MarkDuplicates I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt"
@@ -905,7 +905,7 @@ function extractFastqFromBAM () {
 		OUTPUT=$TEMP/${BAM_NAME//.bam/#.fastq} #the # will be replaced by _1/_2 for PE reads in bam2fastq
 
 		printProgress "[extractFastqFromBAM] Sorting $BAM_NAME by read name..."
-		$SAMTOOLS sort -@ $RUN_THREAD -m $THREAD_MEM -o $SORTED -n $BAM_INPUT
+		$SAMTOOLS sort -@ $RUN_THREAD -m $SORT_MEM -o $SORTED -n $BAM_INPUT
 
 		printProgress "[extractFastqFromBAM] Extracting reads from $SORTED..."
 		$BAM2FASTQ -o $OUTPUT $SORTED # TODO Is this how bamToFastq works?
