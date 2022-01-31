@@ -545,7 +545,7 @@ function extractFastq () {
 	fi
 
 	printProgress "[masterDownload] Fastq files for $NAME are moved to $CURRENT_DIRECTORY/$FASTQ_DIRECTORY"
-	rm *.fastq
+	rm *.fastq.gz
 	rm -r $CODE
 }
 
