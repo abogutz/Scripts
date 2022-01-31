@@ -829,6 +829,7 @@ function refineBam () {
 	printProgress "[refineBAM] Final $FILE_BAM is moved to $BAM_FOLDER."
 	
 	rm $FILE_RAW_BAM $FILE_CLEANED_BAM $FILE_SORTED_BAM #remove all the buffer bam files
+	rm *.txt
 
 }
 
