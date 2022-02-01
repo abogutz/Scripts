@@ -46,7 +46,7 @@ SMOOTH_WIN=0
 
 
 # Help Menu
-OPTIONS="hi:ab:B:d:Df:Fg:kLm:M:n:N:ors:t:Tuw:x"
+OPTIONS="hi:ab:B:d:Df:Fg:kK:Lm:M:n:N:ors:t:Tuw:x"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
@@ -66,6 +66,7 @@ HELP_FULL="\n$HELP\n
 -F\tOnly output .fastq files.\n\t
 -g\tGenome build for alignment. Allowable: mm9, mm10, rn5, rn6,\n\t\toryCun2, mesAur1, or hg19. Default=mm10\n\t
 -k\tKeep .fastq files when done.\n\t
+-K\tNCBI API Key for use.\n\t
 -m\tMemory to give each thread (Format=XG/M).\n\t
 -M\tMinimum mapping quality for bigwig generation. Default=5\n\t
 -n\tBin size for bigwig generation. Larger bins to smooth noisy\n\t\tdata. Default=1\n\t
@@ -149,6 +150,9 @@ function parseOptions () {
 				;;
 			k) #keep fastq files after alignment
 				KEEP_FASTQ=true
+				;;
+			K)
+				export NCBI_API_KEY=${OPTARG}
 				;;
 #			L)
 #				LOCAL_RUN=true
