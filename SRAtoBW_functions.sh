@@ -294,7 +294,7 @@ function setGenome () {
 
 	STAR_GENOME_DIR=$GENOME_DIR/$GENOME_BUILD"-STAR"
 	STAR_SJ_DB=$GENOME_DIR/$GENOME_BUILD"-NCBIRefSeq.gtf"
-	BISMARK_GENOME_DIR=$GENOME_DIR
+	BISMARK_GENOME_DIR=$GENOME_DIR # TODO should this be /bisulfite?
 	BOWTIE2_INDEXES=$GENOME_DIR/$GENOME_BUILD
 
 	#directory that stores pseudogenomes for allelic pipeline
@@ -667,7 +667,7 @@ function masterAlign () {
 	STAR_ARGUMENTS="--genomeDir $STAR_GENOME_DIR --sjdbGTFfile $STAR_SJ_DB --runThreadN $RUN_THREAD --sjdbOverhang 70 --outFilterType BySJout --twopassMode Basic --twopass1readsN 1000000000 --outSAMunmapped Within --outSAMtype BAM Unsorted --outSAMstrandField intronMotif --readFilesCommand zcat "
 
 	#here kinda assumes that samtools and bowtie2 are both in the path, or else you will need to specify their path here
-	BISMARK_ARGUMENTS="--temp_dir $TEMP_DIR --gzip --chunkmbs $BISMARK_MEM -p $BOWTIE_THREAD --bowtie2 --bam $BISMARK_GENOME_DIR"
+	BISMARK_ARGUMENTS="--temp_dir $TEMP_DIR --gzip --local -p $RUN_THREAD --bowtie2 --bam $BISMARK_GENOME_DIR"
 #	SEARCH_KEY=${1:-$SEARCH_KEY}
 
 	for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*fastq.gz; do
