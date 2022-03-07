@@ -749,6 +749,7 @@ function alignBismark () {
 	fi
 
 	printProgress "[masterAlign Bismark] Alignment completed -> $FILE_RAW_BAM"
+	BISMARK_OUTPUT=${BISMARK_OUTPUT//.fastq.gz/}
 	mv $BISMARK_OUTPUT $FILE_RAW_BAM
 	rm *report.txt
 }
@@ -1300,7 +1301,7 @@ function generateBSTrack () {
 
 	printProgress "[masterTrackHub generateBSTrack] Filtering $FILE for mapping quality of $MIN_MAPQ"
 	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FOLDER_FILE
-	$BISMARK_METH_EXTRACT --gzip --multicore $RUN_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
+	$BISMARK_METH_EXTRACT --gzip --multicore $BISMARK_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
 
 	gunzip $TEMP_BEDGRAPH.gz
 #		grep ^[^\*] $FILE_BEDGRAPH > $TEMP_DIR/temp.bedgraph
