@@ -827,7 +827,7 @@ function refineBam () {
 	$SAMTOOLS sort -@ $RUN_THREAD -m $SORT_MEM -o $FILE_SORTED_BAM -T $NAME $FILE_CLEANED_BAM
 		
 	printProgress "[refineBAM] Marking duplicates..." #not removing the duplicates
-	$PICARD MarkDuplicates I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt"
+	$PICARD MarkDuplicates I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt" TMP_DIR=$TEMP_DIR
 
 	mv $FILE_BAM $BAM_FOLDER
 	checkFileExists $BAM_FOLDER/$FILE_BAM
