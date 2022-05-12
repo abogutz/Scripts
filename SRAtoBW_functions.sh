@@ -3,6 +3,7 @@
 ###List of functions that can be used in various pipelines for download, align and creating track hub
 
 # TODO 2021-11-03 BAM files created under user group, not lab group on Graham
+#DO THIS THING
 
 ##System Specific Configuration
 
@@ -829,6 +830,7 @@ function refineBam () {
 	printProgress "[refineBAM] Marking duplicates..." #not removing the duplicates
 	$PICARD MarkDuplicates I=$FILE_SORTED_BAM O=$FILE_BAM M=$NAME"_markDupeMetrics.txt" TMP_DIR=$TEMP_DIR
 
+	chgrp $GROUP $FILE_BAM
 	mv $FILE_BAM $BAM_FOLDER
 	checkFileExists $BAM_FOLDER/$FILE_BAM
 	printProgress "[refineBAM] Final $FILE_BAM is moved to $BAM_FOLDER."
@@ -838,7 +840,7 @@ function refineBam () {
 
 }
 
-### Searches for .bam files containing _Rep#.bam in nested directories and combines them into a single bam
+### Searches for .bam files containing _Rep#.bam in nested directories and combines them into a single bam #TODO make this more specific
 function collapseReplicates () {
 	cd $TEMP_DIR
 	CURRENT=""
