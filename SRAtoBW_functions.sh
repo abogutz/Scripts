@@ -1300,6 +1300,7 @@ function generateRNATrack () {
 function generateBSTrack () {
 	FILE_TEMP_1=$TEMP_DIR/$FILE_NAME"_temp.bam"
 	TEMP_BEDGRAPH=${FILE_TEMP_1//.bam/.bedGraph}
+	TEMP_BEDGRAPH_2=${TEMP_BEDGRAPH//.bedGraph/_2.bedGraph}
 
 	printProgress "[masterTrackHub generateBSTrack] Filtering $FILE for mapping quality of $MIN_MAPQ"
 	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FOLDER_FILE
@@ -1307,9 +1308,8 @@ function generateBSTrack () {
 
 	gunzip $TEMP_BEDGRAPH.gz
 #		grep ^[^\*] $FILE_BEDGRAPH > $TEMP_DIR/temp.bedgraph
-#		mv $TEMP_BEDGRAPH $FILE_BEDGRAPH
-#		sort -k1,1 -k2,2n $TEMP_DIR/temp.bedgraph > $FILE_BEDGRAPH
-#		rm $TEMP_DIR/temp.bedgraph
+	sort -k1,1 -k2,2n $TEMP_BEDGRAPH > $TEMP_BEDGRAPH_2
+	mv $TEMP_BEDGRAPH_2 $TEMP_BEDGRAPH
 	$BEDGRAPHTOBW $TEMP_BEDGRAPH $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME.bw
 	rm $TEMP_BEDGRAPH
 	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
