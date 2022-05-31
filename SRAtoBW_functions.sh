@@ -892,6 +892,7 @@ function collapseReplicates () {
 }
 
 ###Remove downloaded fastq files unless specified
+# TODO what if this doesn't exist?
 function removeFASTQ () {
 	if [[ $KEEP_FASTQ == false ]]; then
 		echo "Not keeping fastq..."
@@ -1308,8 +1309,9 @@ function generateBSTrack () {
 
 	gunzip $TEMP_BEDGRAPH.gz
 #		grep ^[^\*] $FILE_BEDGRAPH > $TEMP_DIR/temp.bedgraph
-	sort -k1,1 -k2,2n $TEMP_BEDGRAPH > $TEMP_BEDGRAPH_2
-	mv $TEMP_BEDGRAPH_2 $TEMP_BEDGRAPH
+	tail -n +2 $TEMP_BEDGRAPH > $TEMP_BEDGRAPH_2
+	sort -k1,1 -k2,2n $TEMP_BEDGRAPH_2 > $TEMP_BEDGRAPH
+	rm $TEMP_BEDGRAPH_2
 	$BEDGRAPHTOBW $TEMP_BEDGRAPH $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME.bw
 	rm $TEMP_BEDGRAPH
 	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
