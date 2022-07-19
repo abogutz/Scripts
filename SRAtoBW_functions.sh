@@ -1233,14 +1233,44 @@ function masterTrackHub () {
 		elif [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"PBAT"* ]]; then
 			generateBSTrack
 		else #ChIPseq - not stranded
+			case $FILE_NAME in
+				*K4me3*)
+					COLOUR="0,0,255"
+					;;
+				*K9me3*)
+					COLOUR="200,0,0"
+					;;
+				*K27me3*)
+					COLOUR="255,0,150"
+					;;
+				*K27ac*)
+					COLOUR="0,100,100"
+					;;
+				*K36me2*)
+					COLOUR="100,0,100"
+					;;
+				*K36me3*)
+					COLOUR="200,0,200"
+					;;
+				*H2AK119ub*)
+					COLOUR="0,200,0"
+					;;
+				*PolII*)
+					COLOUR="50,50,200"
+					;;
+				*)
+					COLOUR="100,100,100"
+					;;
+			esac
 			generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
-			printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
+			printTrackHubUnstranded $FOLDER_NAME $FILE_NAME $COLOUR
 		fi
 		
 	done
 }
 
 function generateRNATrack () {
+	COLOUR="50,0,200"
 	if [[ $PAIRED == true ]] ; then
 		echo "Extracting F reads over Actb..."
 		$SAMTOOLS view -L $ACTB_BED -f 64 $FOLDER_FILE > Actb.sam
@@ -1272,7 +1302,7 @@ function generateRNATrack () {
 
 	if [[ $STRANDED == "Unstranded" ]] ; then
 		generateBigwigsUnstranded $FOLDER_FILE $FILE_NAME
-		printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
+		printTrackHubUnstranded $FOLDER_NAME $FILE_NAME $COLOUR
 	else
 		FILE_BIGWIG_POS=$TRACK_FOLDER/$FILE_NAME"_pos.bw"
 		FILE_BIGWIG_NEG=$TRACK_FOLDER/$FILE_NAME"_neg.bw"
@@ -1294,11 +1324,12 @@ function generateRNATrack () {
 		mv $FILE_BEDGRAPH_TEMP2 $FILE_BEDGRAPH_TEMP
 		$BEDGRAPHTOBW $FILE_BEDGRAPH_TEMP $CHROM_SIZES $FILE_BIGWIG_NEG
 		rm $FILE_BEDGRAPH_TEMP
-		printTrackHubStranded $FOLDER_NAME $FILE_NAME
+		printTrackHubStranded $FOLDER_NAME $FILE_NAME $COLOUR
 	fi
 }
 
 function generateBSTrack () {
+	COLOUR="0,0,0"
 	FILE_TEMP_1=$TEMP_DIR/$FILE_NAME"_temp.bam"
 	TEMP_BEDGRAPH=${FILE_TEMP_1//.bam/.bedGraph}
 	TEMP_BEDGRAPH_2=${TEMP_BEDGRAPH//.bedGraph/_2.bedGraph}
@@ -1314,7 +1345,7 @@ function generateBSTrack () {
 	rm $TEMP_BEDGRAPH_2
 	$BEDGRAPHTOBW $TEMP_BEDGRAPH $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME.bw
 	rm $TEMP_BEDGRAPH
-	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME
+	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME $COLOUR
 	rm $FILE_TEMP_1
 	rm $TEMP_DIR/CHG*
 	rm $TEMP_DIR/CHH*
@@ -1331,15 +1362,15 @@ function generateBigwigsUnstranded () {
 	$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $1 --outFileName $TRACK_FOLDER/"$2.bw"
 }
 
-#$1=Supertrack name $2=Track name
+#$1=Supertrack name $2=Track name $3=Colour(RGB)
 function printTrackHubUnstranded () { 
-	printf "\ttrack %s\n\tparent %s\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tbigDataUrl %s\n\tcolor 200,50,0\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tautoScale on\n\talwaysZero on\n\n" $2 $1 $2 $2 $2".bw" | tee -a $TRACKDB
+	printf "\ttrack %s\n\tparent %s\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tbigDataUrl %s\n\tcolor %s\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tautoScale on\n\talwaysZero on\n\n" $2 $1 $2 $2 $2".bw" $3 | tee -a $TRACKDB
 }
 
-#Takes in supertrack name then track name
+#$1=Supertrack name $2=Track name $3=Colour(RGB)
 function printTrackHubStranded () {
 	printf "\ttrack %s\n\tparent %s\n\tcontainer multiWig\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tconfigurable on\n\tautoScale on\n\talwaysZero on\n\taggregate transparentOverlay\n\tshowSubtrackColorOnUi on\n\tpriority 1.0\n\n" $2 $1 $2 $2 | tee -a $TRACKDB
-	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_pos" $2 $2"_pos" $2"_pos" $2"_pos.bw" | tee -a $TRACKDB
-	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor 200,50,0\n\t\tautoScale on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" | tee -a $TRACKDB
+	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor %s\n\t\tautoScale on\n\n" $2"_pos" $2 $2"_pos" $2"_pos" $2"_pos.bw" $3 | tee -a $TRACKDB
+	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor %s\n\t\tautoScale on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" $3 | tee -a $TRACKDB
 }
 
