@@ -1231,6 +1231,7 @@ function masterTrackHub () {
 		if [[ $FILE == *"RNA"* ]]; then
 			generateRNATrack
 		elif [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"PBAT"* ]]; then
+			FILE_NAME=${FILE//_$NORMALIZE/} ##remove unused normalization from name
 			generateBSTrack
 		else #ChIPseq - not stranded
 			case $FILE_NAME in
@@ -1349,7 +1350,7 @@ function generateBSTrack () {
 	rm $FILE_TEMP_1
 	rm $TEMP_DIR/CHG*
 	rm $TEMP_DIR/CHH*
-#	rm $TEMP_DIR/CpG*
+#	rm $TEMP_DIR/CpG* # Should we move this file?
 	rm $TEMP_DIR/$FILE_NAME.*
 #		rm $TEMP_DIR/*.bai
 	#TODO Optional: keep more information? Lots of stuff being discarded
