@@ -1238,6 +1238,9 @@ function masterTrackHub () {
 				*K4me3*)
 					COLOUR="0,0,255"
 					;;
+				*K9me2*)
+					COLOUR="200,100,100"
+					;;
 				*K9me3*)
 					COLOUR="200,0,0"
 					;;
