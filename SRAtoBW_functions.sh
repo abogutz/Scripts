@@ -1216,7 +1216,7 @@ function masterTrackHub () {
 
 		printProgress "[masterTrackHub] Name of supertrack: $FOLDER_NAME"
 		if [[ $FOLDER_NAME != $PRINTED_DIR ]] ; then # Create supertrack for housing associated tracks
-			printf "track $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \n\n" | tee -a $TRACKDB 
+			printf "track $FOLDER_NAME \nsuperTrack on show\nshortLabel $FOLDER_NAME \nlongLabel $FOLDER_NAME \nwindowingFunction mean\n\n" | tee -a $TRACKDB 
 			PRINTED_DIR=$FOLDER_NAME
 		fi
 
@@ -1235,6 +1235,9 @@ function masterTrackHub () {
 			generateBSTrack
 		else #ChIPseq - not stranded
 			case $FILE_NAME in
+				*K4me1*)
+					COLOUR="0,100,255"
+					;;
 				*K4me3*)
 					COLOUR="0,0,255"
 					;;
