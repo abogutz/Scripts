@@ -217,7 +217,7 @@ function parseOptions () {
 
 ### Checking dependencies of the functions TODO not sure this works with java dependencies properly
 function checkDependencies () {
-	DEPENDENCIES=($ESEARCH $EFETCH $FASTERQDUMP "$TRIMMOMATIC" $STAR $BISMARK $BOWTIE2 $BWA $SAMTOOLS "$PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
+	DEPENDENCIES=("$TRIMMOMATIC" $STAR $BISMARK $BOWTIE2 $BWA $SAMTOOLS "$PICARD" awk $BAM2FASTQ $BEDGRAPHTOBW $BAMCOVERAGE)
 
 	echo -e "[checkDependencies] Checking Dependencies"
 	EXIT=0
