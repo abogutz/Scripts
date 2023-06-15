@@ -295,7 +295,7 @@ function setGenome () {
 
 	STAR_GENOME_DIR=$GENOME_DIR/$GENOME_BUILD"-STAR"
 	STAR_SJ_DB=$GENOME_DIR/$GENOME_BUILD"-NCBIRefSeq.gtf"
-	BISMARK_GENOME_DIR=$GENOME_DIR/"bisulphite" # TODO should this be /bisulfite?
+	BISMARK_GENOME_DIR=$GENOME_DIR # TODO should this be /bisulfite?
 	BOWTIE2_INDEXES=$GENOME_DIR/$GENOME_BUILD
 
 	#directory that stores pseudogenomes for allelic pipeline
