@@ -1342,7 +1342,7 @@ function generateBSTrack () {
 	TEMP_BEDGRAPH_2=${TEMP_BEDGRAPH//.bedGraph/_2.bedGraph}
 
 	printProgress "[masterTrackHub generateBSTrack] Filtering $FILE for mapping quality of $MIN_MAPQ"
-	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FOLDER_FILE
+	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FOLDER_FILE #TODO PE data needs to be sorted by name first
 	$BISMARK_METH_EXTRACT --gzip --multicore $BISMARK_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
 
 	gunzip $TEMP_BEDGRAPH.gz
