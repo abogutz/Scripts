@@ -671,7 +671,7 @@ function masterAlign () {
 	for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*fastq.gz; do
 		determinePairedFastq # Assigns Fastq names
 
-		if [[ $FILE == *"RNA"* ]]; then
+		if [[ $FILE == *"RNA"* ]]; then #TODO this should read the "name", not the whole path
 			alignSTAR
 		elif [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"PBAT"* ]]; then
 			alignBismark
