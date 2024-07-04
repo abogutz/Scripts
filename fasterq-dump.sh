@@ -28,7 +28,8 @@ do
 	echo $FOLDER
 	cd $FOLDER
 	echo "Dumping fastq files..."
-	$FASTERQDUMP -e $RUN_THREAD --split-files -o "$SCRATCH/$NAME.fastq" $SRA
+#	$FASTERQDUMP -e $RUN_THREAD --split-files -o "$SCRATCH/$NAME.fastq" $SRA # Odd behaviour for --split-files for single reads - creates XXX_1.fastq?
+	$FASTERQDUMP -e $RUN_THREAD -o "$SCRATCH/$NAME.fastq" $SRA
 
 	echo "Compressing fastq files..."
 	for DL_FASTQ in $SCRATCH/*.fastq; do 
