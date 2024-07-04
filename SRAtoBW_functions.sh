@@ -1313,18 +1313,15 @@ function generateRNATrack () {
 		FILE_BIGWIG_TEMP=$TEMP_DIR"/temp.bw"
 		FILE_BEDGRAPH_TEMP=$TEMP_DIR"/temp.bedgraph"
 		FILE_BEDGRAPH_TEMP2=$TEMP_DIR"/temp2.bedgraph"
-		$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand forward --outFileName $FILE_BIGWIG_POS
-		$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand reverse --outFileName $FILE_BIGWIG_NEG
+		$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand forward --outFileName $FILE_BIGWIG_NEG
+		$BAMCOVERAGE $BAM_COVERAGE_ARGUMENTS -b $FOLDER_FILE --filterRNAstrand reverse --outFileName $FILE_BIGWIG_POS
 		if [[ $STRANDED == "Opposite-Strand" ]] ; then
 			mv $FILE_BIGWIG_NEG $FILE_BIGWIG_TEMP
 			mv $FILE_BIGWIG_POS $FILE_BIGWIG_NEG
 			mv $FILE_BIGWIG_TEMP $FILE_BIGWIG_POS
 		fi
 		bigWigToBedGraph $FILE_BIGWIG_NEG $FILE_BEDGRAPH_TEMP
-		awk -F "\t" 'BEGIN {OFS="\t" } {
-			$4 = 0 - $4;
-			print $1, $2, $3, $4;
-		}' $FILE_BEDGRAPH_TEMP > $FILE_BEDGRAPH_TEMP2
+		awk '{$4 *= -1; print $0;}' $FILE_BEDGRAPH_TEMP > $FILE_BEDGRAPH_TEMP2
 		mv $FILE_BEDGRAPH_TEMP2 $FILE_BEDGRAPH_TEMP
 		$BEDGRAPHTOBW $FILE_BEDGRAPH_TEMP $CHROM_SIZES $FILE_BIGWIG_NEG
 		rm $FILE_BEDGRAPH_TEMP
@@ -1375,6 +1372,6 @@ function printTrackHubUnstranded () {
 function printTrackHubStranded () {
 	printf "\ttrack %s\n\tparent %s\n\tcontainer multiWig\n\tshortLabel %s\n\tlongLabel %s\n\ttype bigWig\n\tvisibility full\n\tmaxHeightPixels 100:60:25\n\tconfigurable on\n\tautoScale on\n\talwaysZero on\n\taggregate transparentOverlay\n\tshowSubtrackColorOnUi on\n\twindowingFunction mean\n\n" $2 $1 $2 $2 | tee -a $TRACKDB
 	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor %s\n\t\tautoScale on\n\n" $2"_pos" $2 $2"_pos" $2"_pos" $2"_pos.bw" $3 | tee -a $TRACKDB
-	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor %s\n\t\tautoScale on\n\t\tnegateValues on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" $3 | tee -a $TRACKDB
+	printf "\t\ttrack %s\n\t\tparent %s\n\t\tshortLabel %s\n\t\tlongLabel %s\n\t\ttype bigWig\n\t\tbigDataUrl %s\n\t\tcolor %s\n\t\tautoScale on\n\n" $2"_neg" $2 $2"_neg" $2"_neg" $2"_neg.bw" $3 | tee -a $TRACKDB
 }
 
