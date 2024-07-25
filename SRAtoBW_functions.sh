@@ -616,44 +616,46 @@ function trimReads () {
 ### Determine paired or single-end from name of fastq file
 function determinePairedFastq () {
 	if [[ $FILE == *"_2.fastq.gz" ]] ; then 
-		continue #dont process 2nd read, continue to next iteration
-	fi
-	
-	if [[ $FILE == *"_1.fastq.gz" ]] ; then
-		FASTQ_PATH=${FILE//_1.fastq.gz/} #removes everything that's after // - leaving path to directory
-		NAME=${FASTQ_PATH##*/} #removes all prefixes prior to the last / - removing path to directory
+		READ_TWO=true #dont process 2nd read, continue to next iteration TODO sometimes buggy? Server dependent? Maybe return a value rather than continue here
+		return 0
+	else
+		READ_TWO=false
+		if [[ $FILE == *"_1.fastq.gz" ]] ; then
+			FASTQ_PATH=${FILE//_1.fastq.gz/} #removes everything that's after // - leaving path to directory
+			NAME=${FASTQ_PATH##*/} #removes all prefixes prior to the last / - removing path to directory
+			
+			PAIRED_END=true
+			FILE_FASTQ1=$FASTQ_PATH"_1.fastq.gz"
+			FILE_FASTQ2=$FASTQ_PATH"_2.fastq.gz"
+
+			#checkpoint: fastq files are found before passing into aligner
+			checkFileExists $FILE_FASTQ1
+			checkFileExists $FILE_FASTQ2
+
+		else
+			FASTQ_PATH=${FILE//.fastq.gz}
+			NAME=${FASTQ_PATH##*/}
+
+			PAIRED_END=false
+			FILE_FASTQ=$FASTQ_PATH".fastq.gz"
+
+			#checkpoint: fastq files are found before passing into aligner
+			checkFileExists $FILE_FASTQ
+		fi
+
+		FILE_RAW_BAM=$NAME"_raw.bam"
+		FILE_BAM=$NAME".bam"
 		
-		PAIRED_END=true
-		FILE_FASTQ1=$FASTQ_PATH"_1.fastq.gz"
-		FILE_FASTQ2=$FASTQ_PATH"_2.fastq.gz"
+		if [[ $NAME == *_[Rr]ep* ]] ; then #creating name of folder that will be storing the BAMs
+			X=${NAME%_*} #removing the "_Rep"
+			BAM_FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
+		else
+			BAM_FOLDER_NAME=${NAME##*_}
+		fi
 
-		#checkpoint: fastq files are found before passing into aligner
-		checkFileExists $FILE_FASTQ1
-		checkFileExists $FILE_FASTQ2
-
-	else
-		FASTQ_PATH=${FILE//.fastq.gz}
-		NAME=${FASTQ_PATH##*/}
-
-		PAIRED_END=false
-		FILE_FASTQ=$FASTQ_PATH".fastq.gz"
-
-		#checkpoint: fastq files are found before passing into aligner
-		checkFileExists $FILE_FASTQ
+		BAM_FOLDER=$CURRENT_DIRECTORY/$BAM_FOLDER_NAME
+		mkdir -p $BAM_FOLDER
 	fi
-
-	FILE_RAW_BAM=$NAME"_raw.bam"
-	FILE_BAM=$NAME".bam"
-	
-	if [[ $NAME == *_[Rr]ep* ]] ; then #creating name of folder that will be storing the BAMs
-		X=${NAME%_*} #removing the "_Rep"
-		BAM_FOLDER_NAME=${X##*_} #Removing everything before the last _ (leaving grouping identifier)
-	else
-		BAM_FOLDER_NAME=${NAME##*_}
-	fi
-
-	BAM_FOLDER=$CURRENT_DIRECTORY/$BAM_FOLDER_NAME
-	mkdir -p $BAM_FOLDER
 }
 
 ### Align fastq files to using data-specific aligner
@@ -670,6 +672,9 @@ function masterAlign () {
 
 	for FILE in $CURRENT_DIRECTORY/$FASTQ_DIRECTORY/*fastq.gz; do
 		determinePairedFastq # Assigns Fastq names
+		if [[ $READ_TWO == true ]] ; then
+			continue
+		fi
 
 		if [[ $FILE == *"RNA"* ]]; then #TODO this should read the "name", not the whole path
 			alignSTAR
