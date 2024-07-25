@@ -616,7 +616,7 @@ function trimReads () {
 ### Determine paired or single-end from name of fastq file
 function determinePairedFastq () {
 	if [[ $FILE == *"_2.fastq.gz" ]] ; then 
-		READ_TWO=true #dont process 2nd read, continue to next iteration TODO sometimes buggy? Server dependent? Maybe return a value rather than continue here
+		READ_TWO=true #dont process 2nd read, continue to next iteration
 		return 0
 	else
 		READ_TWO=false
