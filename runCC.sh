@@ -13,7 +13,7 @@ SRA_FILE=""
 GENOME="mm10"
 THREADS=8
 MEM_THREAD="4G"
-TEMP_DIR=$HOME"/scratch/"$SLURM_JOB_ID"/"
+TEMP_DIR=$SCRATCH"/"$SLURM_JOB_ID"/"
 mkdir $TEMP_DIR
 
 # Many other options exist for MasterDAT.sh, run with -h option to see all of them
