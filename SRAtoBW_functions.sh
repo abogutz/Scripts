@@ -913,17 +913,19 @@ function extractFastqFromBAM () {
 		local TEMP="temp"
 		local SORTED="temp_sorted_"$BAM_NAME
 		mkdir -p $TEMP
-		OUTPUT=$TEMP/${BAM_NAME//.bam/#.fastq} #the # will be replaced by _1/_2 for PE reads in bam2fastq
+		OUTPUT_1=$TEMP/${BAM_NAME//.bam/_1.fastq}
+		OUTPUT_2=$TEMP/${BAM_NAME//.bam/_2.fastq}
 
 		printProgress "[extractFastqFromBAM] Sorting $BAM_NAME by read name..."
 		$SAMTOOLS sort -@ $RUN_THREAD -m $SORT_MEM -o $SORTED -n $BAM_INPUT
 
 		printProgress "[extractFastqFromBAM] Extracting reads from $SORTED..."
-		$BAM2FASTQ -o $OUTPUT $SORTED # TODO Is this how bamToFastq works?
+#		$BAM2FASTQ -o $OUTPUT $SORTED # TODO Is this how bamToFastq works? Answer: NO
+		$SAMTOOLS fastq -@ $RUN_THREAD -1 $OUTPUT_1 -2 $OUTPUT_2 $SORTED # TODO Is this how bamToFastq works? Answer: NO
 		rm $SORTED
 
 		printProgress "[extractFastqFromBAM] Compressing and moving extracted fastq file(s)..."
-		for EX_FASTQ in ${OUTPUT//#.fastq/*.fastq}; do
+		for EX_FASTQ in ${OUTPUT_1//_1.fastq/*.fastq}; do
 			( gzip $EX_FASTQ
 				mv $EX_FASTQ.gz ${EX_FASTQ//$TEMP/$CURRENT_DIRECTORY\/$FASTQ_DIRECTORY}.gz
 			) &
