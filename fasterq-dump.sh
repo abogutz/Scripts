@@ -6,8 +6,8 @@
 #SBATCH --mail-user=aaron.bogutz@ubc.ca
 #SBATCH --mail-type=ALL
 
-GROUP="def-mlorincz"
-RUN_THREAD=8
+GROUP=$SBATCH_ACCOUNT
+RUN_THREAD=$SLURM_CPUS_PER_TASK
 FASTQ_DIRECTORY="Fastq"
 CURRENT_DIRECTORY=$(pwd)
 SCRATCH="$HOME/scratch"
