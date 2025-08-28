@@ -15,8 +15,8 @@ mkdir $TEMP_DIR
 
 mkdir $FASTQ_DIRECTORY
 
-module load gcc/9.3.0
-module load sra-toolkit/2.10.8
+#module load gcc/9.3.0
+module load sra-toolkit
 FASTERQDUMP="fasterq-dump"
 
 for FILE in SRA/*/*/*.sra
