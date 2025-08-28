@@ -10,7 +10,8 @@ GROUP=$SBATCH_ACCOUNT
 RUN_THREAD=$SLURM_CPUS_PER_TASK
 FASTQ_DIRECTORY="Fastq"
 CURRENT_DIRECTORY=$(pwd)
-SCRATCH="$HOME/scratch"
+TEMP_DIR=$SCRATCH"/"$SLURM_JOB_ID"/"
+mkdir $TEMP_DIR
 
 mkdir $FASTQ_DIRECTORY
 
@@ -28,11 +29,10 @@ do
 	echo $FOLDER
 	cd $FOLDER
 	echo "Dumping fastq files..."
-#	$FASTERQDUMP -e $RUN_THREAD --split-files -o "$SCRATCH/$NAME.fastq" $SRA # Odd behaviour for --split-files for single reads - creates XXX_1.fastq?
-	$FASTERQDUMP -e $RUN_THREAD -o "$SCRATCH/$NAME.fastq" $SRA
+	$FASTERQDUMP -e $RUN_THREAD -o "$TEMP_DIR/$NAME.fastq" $SRA
 
 	echo "Compressing fastq files..."
-	for DL_FASTQ in $SCRATCH/*.fastq; do 
+	for DL_FASTQ in $TEMP_DIR/*.fastq; do 
 		pigz -p $RUN_THREAD $DL_FASTQ
 #		COMPRESS_PID_ARRAY[$COMPRESS_COUNTER]=$!
 #		((COMPRESS_COUNTER++))
@@ -43,7 +43,7 @@ do
 #	done	
 	
 	echo "Moving fastq.gz files..."
-	cd $SCRATCH
+	cd $TEMP_DIR
 	if `ls *_1.fastq.gz 1> /dev/null 2>&1`; then
 		echo "Paired..."
 #		exit
@@ -86,3 +86,6 @@ do
 	cd $CURRENT_DIRECTORY
 	#rm -r $NAME
 done
+
+
+rm -r $TEMP_DIR
