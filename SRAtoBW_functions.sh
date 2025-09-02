@@ -678,7 +678,7 @@ function masterAlign () {
 
 		if [[ $FILE == *"RNA"* ]]; then #TODO this should read the "name", not the whole path
 			alignSTAR
-		elif [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"PBAT"* ]]; then
+		elif [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"WGBS"* ]] || [[ $FILE == *"PBAT"* ]]; then
 			alignBismark
 		elif [[ $FILE == *"HiC" ]]; then
 			alignHiCUP
