@@ -253,9 +253,12 @@ function setUp () {
 
 		printProgress "[setUp] Starting Script"
 #		printProgress "[setUp] Search key for the set: $SEARCH_KEY"
-		printProgress "[setUp] SRA array: $CODE_ARRAY"
+#		printProgress "[setUp] SRA array: $CODE_ARRAY"
 		printProgress "[setUp] All required dependencies are found"
+		
 		setGenome $GENOME_BUILD
+		
+		BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH_WIN --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates"
 #	fi
 }
 
@@ -1195,7 +1198,6 @@ function masterTrackHub () {
 	printf "genome "$GENOME_BUILD"\ntrackDb "$GENOME_BUILD"/trackDb.txt" > $TRACK_HUB_DIR/genomes.txt		
 
 	
-	BAM_COVERAGE_ARGUMENTS="--binSize $BIN_SIZE -p $RUN_THREAD --normalizeUsing $NORMALIZE --smoothLength $SMOOTH_WIN --outFileFormat bigwig --minMappingQuality $MIN_MAPQ --ignoreDuplicates"
 
 	PRINTED_DIR=""
 
