@@ -47,7 +47,7 @@ SMOOTH_WIN=0
 
 
 # Help Menu
-OPTIONS="hi:ab:B:d:Df:Fg:kK:Lm:M:n:N:ors:t:Tuw:x"
+OPTIONS="hi:abB:d:Df:Fg:kK:Lm:M:n:N:ors:t:Tuw:x"
 
 HELP="USAGE:\t $(basename $0) [OPTIONS] -h for help"
 
