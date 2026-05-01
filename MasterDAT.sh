@@ -4,7 +4,7 @@
 #############################################
 
 #Choose the correct config file specific to the server you are currently using (see SCRIPTS_DIR for config files)
-PROJECT_DIR="/project/def-mlorincz/"
+PROJECT_DIR="/project/"$SLURM_JOB_ACCOUNT
 source $PROJECT_DIR/scripts/MasterDAT/"ComputeCanada.config"
 source $PROJECT_DIR/scripts/MasterDAT/"SRAtoBW_functions.sh"
 # SHELL_SCRIPT=$SCRIPTS_DIR/$(basename $0) #TODO still needed?

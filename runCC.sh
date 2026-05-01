@@ -11,17 +11,21 @@
 # Modify these to whatever you want. Should match up with SBATCH submission parameters above.
 SRA_FILE=""
 GENOME="mm10"
-THREADS=8
+THREADS=$SLURM_CPUS_PER_TASK
 MEM_THREAD="4G"
 TEMP_DIR=$SCRATCH"/"$SLURM_JOB_ID"/"
 mkdir $TEMP_DIR
+GROUP=$SLURM_JOB_ACCOUNT
 
 # Many other options exist for MasterDAT.sh, run with -h option to see all of them
 
-$HOME/projects/def-mlorincz/scripts/MasterDAT/MasterDAT.sh -d $TEMP_DIR -t $THREADS -m $MEM_THREAD -f ./Fastq -g $GENOME # Fastq input - will use .fastq.gz files located in ./Fastq (can change). Name format is very important
+# Fastq input - will use .fastq.gz files located in ./Fastq (can change). Name format is very important
+/project/$GROUP/scripts/MasterDAT/MasterDAT.sh -d $TEMP_DIR -t $THREADS -m $MEM_THREAD -f ./Fastq -g $GENOME 
 
-#$HOME/projects/def-mlorincz/scripts/MasterDAT/MasterDAT.sh -d $TEMP_DIR -t $THREADS -m $MEM_THREAD -b -g $GENOME # BAM file input - will find ALL bam files in subdirectories of current location (one level down)
+# BAM file input - will find ALL bam files in subdirectories of current location (one level down)
+#/project/$GROUP/scripts/MasterDAT/MasterDAT.sh -d $TEMP_DIR -t $THREADS -m $MEM_THREAD -b -g $GENOME 
 
-#$HOME/projects/def-mlorincz/scripts/MasterDAT/MasterDAT.sh -d $TEMP_DIR -t $THREADS -m $MEM_THREAD -i $SRA_FILE -g $GENOME -F # Only produce fastq files after downloading
+# Only produce fastq files after downloading
+#/project/$GROUP/scripts/MasterDAT/MasterDAT.sh -d $TEMP_DIR -t $THREADS -m $MEM_THREAD -i $SRA_FILE -g $GENOME -F
 
 rm -r $TEMP_DIR
