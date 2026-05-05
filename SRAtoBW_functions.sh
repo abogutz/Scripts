@@ -1236,7 +1236,7 @@ function masterTrackHub () {
 
 		if [[ $FILE == *"RNA"* ]]; then
 			generateRNATrack
-		elif [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"PBAT"* ]]; then
+		elif [[ $FILE == *"BSSeq"* ]] || [[ $FILE == *"RRBS"* ]] || [[ $FILE == *"WGBS"* ]] || [[ $FILE == *"PBAT"* ]]; then
 			FILE_NAME=${FILE//_$NORMALIZE/} ##remove unused normalization from name
 			generateBSTrack
 		else #ChIPseq - not stranded
