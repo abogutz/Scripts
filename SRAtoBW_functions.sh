@@ -1340,25 +1340,27 @@ function generateRNATrack () {
 
 function generateBSTrack () {
 	COLOUR="0,0,0"
-	FILE_TEMP_1=$TEMP_DIR/$FILE_NAME"_temp.bam"
+	TEMP_BAM=$TEMP_DIR"/temp.bam"
+	TEMP_BAM2=$TEMP_DIR"/temp2.bam"
 	TEMP_BEDGRAPH=${FILE_TEMP_1//.bam/.bedGraph}
 	TEMP_BEDGRAPH_2=${TEMP_BEDGRAPH//.bedGraph/_2.bedGraph}
+	BISMARK_OUTPUT=${TEMP_BAM2//.bam/.bismark.cov.gz}
+	METHYL_OUTPUT=${FOLDER_FILE//.bam/.methyl.bedgraph}
+	COVER_OUTPUT=${FOLDER_FILE//.bam/.cover.bedgraph}
 
 	printProgress "[masterTrackHub generateBSTrack] Filtering $FILE for mapping quality of $MIN_MAPQ"
-	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $FILE_TEMP_1 $FOLDER_FILE #TODO PE data needs to be sorted by name first
-	$BISMARK_METH_EXTRACT --gzip --multicore $BISMARK_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $FILE_TEMP_1
-
-	gunzip $TEMP_BEDGRAPH.gz
-#		grep ^[^\*] $FILE_BEDGRAPH > $TEMP_DIR/temp.bedgraph
-	tail -n +2 $TEMP_BEDGRAPH > $TEMP_BEDGRAPH_2
-	sort -k1,1 -k2,2n $TEMP_BEDGRAPH_2 > $TEMP_BEDGRAPH
-	rm $TEMP_BEDGRAPH_2
-	$BEDGRAPHTOBW $TEMP_BEDGRAPH $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME.bw
-	rm $TEMP_BEDGRAPH
-	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME $COLOUR
-	rm $FILE_TEMP_1
-	rm $TEMP_DIR/CHG*
-	rm $TEMP_DIR/CHH*
+	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $TEMP_BAM $FOLDER_FILE
+	$SAMTOOLS sort -n -@ $THREAD -m $SORT_MEM -o $TEMP_BAM2 $TEMP_BAM
+	$BISMARK_METH_EXTRACT --merge_non_CpG --comprehensive --gzip --multicore $BISMARK_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $TEMP_BAM2
+	rm $TEMP_BAM $TEMP_BAM2
+	zcat $BISMARK_OUTPUT | awk -v meth=$METHYL_OUTPUT -v cover=$COVER_OUTPUT '{print $1, $2, $3, $4 > meth; print $1, $2, $3, $5+$6 > cover}'
+	$BEDGRAPHTOBW $METHYL_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME".methyl.bw"
+	$BEDGRAPHTOBW $COVER_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME".cover.bw"
+	rm $COVER_OUTPUT $METHYL_OUTPUT
+	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME".methyl" $COLOUR
+	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME".cover" $COLOUR
+#	rm $TEMP_DIR/CHG*
+#	rm $TEMP_DIR/CHH*
 #	rm $TEMP_DIR/CpG* # Should we move this file?
 	rm $TEMP_DIR/$FILE_NAME.*
 #		rm $TEMP_DIR/*.bai
