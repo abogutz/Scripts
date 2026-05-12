@@ -15,7 +15,7 @@ THREADS=$SLURM_CPUS_PER_TASK
 MEM_THREAD="4G"
 TEMP_DIR=$SCRATCH"/"$SLURM_JOB_ID"/"
 mkdir $TEMP_DIR
-GROUP=$SLURM_JOB_ACCOUNT
+GROUP=${SLURM_JOB_ACCOUNT//_cpu/}
 
 # Many other options exist for MasterDAT.sh, run with -h option to see all of them
 
