@@ -1359,11 +1359,7 @@ function generateBSTrack () {
 	rm $COVER_OUTPUT $METHYL_OUTPUT
 	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME".methyl" $COLOUR
 	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME".cover" $COLOUR
-#	rm $TEMP_DIR/CHG*
-#	rm $TEMP_DIR/CHH*
-#	rm $TEMP_DIR/CpG* # Should we move this file?
 	rm $TEMP_DIR/$FILE_NAME.*
-#		rm $TEMP_DIR/*.bai
 	#TODO Optional: keep more information? Lots of stuff being discarded
 }
 

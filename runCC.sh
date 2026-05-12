@@ -1,5 +1,5 @@
 #! /bin/bash
-#SBATCH --account=<Group Name>            # required (format def-name)
+#SBATCH --account=def-mlorincz            # required (format def-name)
 #SBATCH --cpus-per-task=8                        # number of cpus
 #SBATCH --mem-per-cpu=4G                 # memory; default unit is megabytes
 #SBATCH --time=01-12:00                   # time (DD-HH:MM)
