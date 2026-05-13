@@ -1350,10 +1350,13 @@ function generateBSTrack () {
 
 	printProgress "[masterTrackHub generateBSTrack] Filtering $FILE for mapping quality of $MIN_MAPQ"
 	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $TEMP_BAM $FOLDER_FILE
-	$SAMTOOLS sort -n -@ $THREAD -m $SORT_MEM -o $TEMP_BAM2 $TEMP_BAM
+	printProgress "[masterTrackHub generateBSTrack] Sorting $FILE by read name"
+	$SAMTOOLS sort -n -@ $RUN_THREAD -m $SORT_MEM -o $TEMP_BAM2 $TEMP_BAM
+	printProgress "[masterTrackHub generateBSTrack] Extracting DNAme"
 	$BISMARK_METH_EXTRACT --merge_non_CpG --comprehensive --gzip --multicore $BISMARK_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $TEMP_BAM2
 	rm $TEMP_BAM $TEMP_BAM2
 	zcat $BISMARK_OUTPUT | awk -v meth=$METHYL_OUTPUT -v cover=$COVER_OUTPUT '{print $1, $2, $3, $4 > meth; print $1, $2, $3, $5+$6 > cover}'
+	printProgress "[masterTrackHub generateBSTrack] Converting to bigwigs"
 	$BEDGRAPHTOBW $METHYL_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME".methyl.bw"
 	$BEDGRAPHTOBW $COVER_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME".cover.bw"
 	rm $COVER_OUTPUT $METHYL_OUTPUT
