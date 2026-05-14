@@ -1347,6 +1347,8 @@ function generateBSTrack () {
 	BISMARK_OUTPUT=${TEMP_BAM2//.bam/.bismark.cov.gz}
 	METHYL_OUTPUT=${FOLDER_FILE//.bam/.methyl.bedgraph}
 	COVER_OUTPUT=${FOLDER_FILE//.bam/.cover.bedgraph}
+	METHYL_BW=${FOLDER_FILE//.bam/.methyl.bw}
+	COVER_BW=${FOLDER_FILE//.bam/.cover.bw}
 
 	printProgress "[masterTrackHub generateBSTrack] Filtering $FILE for mapping quality of $MIN_MAPQ"
 	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $TEMP_BAM $FOLDER_FILE
@@ -1358,11 +1360,11 @@ function generateBSTrack () {
 	rm $TEMP_BAM $TEMP_BAM2
 	zcat $BISMARK_OUTPUT | awk -v meth=$METHYL_OUTPUT -v cover=$COVER_OUTPUT '{print $1, $2, $3, $4 > meth; print $1, $2, $3, $5+$6 > cover}'
 	printProgress "[masterTrackHub generateBSTrack] Converting to bigwigs"
-	$BEDGRAPHTOBW $METHYL_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME".methyl.bw"
-	$BEDGRAPHTOBW $COVER_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$FILE_NAME".cover.bw"
+	$BEDGRAPHTOBW $METHYL_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$METHYL_BW
+	$BEDGRAPHTOBW $COVER_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$COVER_BW
 	rm $COVER_OUTPUT $METHYL_OUTPUT
-	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME".methyl" $COLOUR
-	printTrackHubUnstranded $FOLDER_NAME $FILE_NAME".cover" $COLOUR
+	printTrackHubUnstranded $FOLDER_NAME ${METHYL_BW//.bw/} $COLOUR
+	printTrackHubUnstranded $FOLDER_NAME ${COVER_BW//.bw/} $COLOUR
 	rm $TEMP_DIR/$FILE_NAME.*
 	#TODO Optional: keep more information? Lots of stuff being discarded
 }
