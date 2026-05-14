@@ -1358,7 +1358,7 @@ function generateBSTrack () {
 	let BISMARK_EXTRACT_THREAD=$RUN_THREAD/2 #Bismark Methylation extraction much less multiplicative than alignment
 	$BISMARK_METH_EXTRACT --merge_non_CpG --comprehensive --gzip --multicore $BISMARK_EXTRACT_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $TEMP_BAM2
 	rm $TEMP_BAM $TEMP_BAM2
-	zcat $BISMARK_OUTPUT | awk -v meth=$METHYL_OUTPUT -v cover=$COVER_OUTPUT '{print $1, $2, $3, $4 > meth; print $1, $2, $3, $5+$6 > cover}'
+	zcat $BISMARK_OUTPUT | awk -v meth=$METHYL_OUTPUT -v cover=$COVER_OUTPUT '{print $1, $2, $3+1, $4 > meth; print $1, $2, $3+1, $5+$6 > cover}'
 	printProgress "[masterTrackHub generateBSTrack] Converting to bigwigs"
 	$BEDGRAPHTOBW $METHYL_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$METHYL_BW
 	$BEDGRAPHTOBW $COVER_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$COVER_BW
