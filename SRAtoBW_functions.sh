@@ -880,8 +880,12 @@ function collapseReplicates () {
 		else
 			printProgress "[collapseReplicates] No replicates for $FILE"
 			MERGED_BAM=$FILE
-			printProgress "[collapseReplicates] Indexing BAM file..."
-			$SAMTOOLS index $MERGED_BAM
+			if [[ -f $MERGED_BAM.bai ]]; then 
+				printProgress "[collapseReplicates] File already indexed"
+			else 
+				printProgress "[collapseReplicates] Indexing BAM file..."
+				$SAMTOOLS index $MERGED_BAM
+			fi
 		fi
 
 		checkFileExists $MERGED_BAM
@@ -1352,13 +1356,16 @@ function generateBSTrack () {
 
 	printProgress "[masterTrackHub generateBSTrack] Filtering $FILE for mapping quality of $MIN_MAPQ"
 	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $TEMP_BAM $FOLDER_FILE
+	
 	printProgress "[masterTrackHub generateBSTrack] Sorting $FILE by read name"
 	$SAMTOOLS sort -n -@ $RUN_THREAD -m $SORT_MEM -o $TEMP_BAM2 $TEMP_BAM
+	
 	printProgress "[masterTrackHub generateBSTrack] Extracting DNAme"
 	let BISMARK_EXTRACT_THREAD=$RUN_THREAD/2 #Bismark Methylation extraction much less multiplicative than alignment
 	$BISMARK_METH_EXTRACT --merge_non_CpG --comprehensive --gzip --multicore $BISMARK_EXTRACT_THREAD --bedGraph --genome_folder $BISMARK_GENOME_DIR -o $TEMP_DIR $TEMP_BAM2
 	rm $TEMP_BAM $TEMP_BAM2
 	zcat $BISMARK_OUTPUT | awk -v meth=$METHYL_OUTPUT -v cover=$COVER_OUTPUT '{print $1, $2, $3+1, $4 > meth; print $1, $2, $3+1, $5+$6 > cover}'
+	
 	printProgress "[masterTrackHub generateBSTrack] Converting to bigwigs"
 	$BEDGRAPHTOBW $METHYL_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$METHYL_BW
 	$BEDGRAPHTOBW $COVER_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$COVER_BW
