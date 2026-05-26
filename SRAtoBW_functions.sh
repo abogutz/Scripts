@@ -1349,10 +1349,10 @@ function generateBSTrack () {
 	TEMP_BEDGRAPH=${FILE_TEMP_1//.bam/.bedGraph}
 	TEMP_BEDGRAPH_2=${TEMP_BEDGRAPH//.bedGraph/_2.bedGraph}
 	BISMARK_OUTPUT=${TEMP_BAM2//.bam/.bismark.cov.gz}
-	METHYL_OUTPUT=${FOLDER_FILE//.bam/.methyl.bedgraph}
-	COVER_OUTPUT=${FOLDER_FILE//.bam/.cover.bedgraph}
-	METHYL_BW=${FOLDER_FILE//.bam/.methyl.bw}
-	COVER_BW=${FOLDER_FILE//.bam/.cover.bw}
+	METHYL_OUTPUT=${TEMP_BAM2//.bam/.methyl.bedgraph}
+	COVER_OUTPUT=${TEMP_BAM2//.bam/.cover.bedgraph}
+	METHYL_BW=$TRACK_FOLDER/$FILE_NAME".methyl.bw"
+	COVER_BW=$TRACK_FOLDER/$FILE_NAME".cover.bw"
 
 	printProgress "[masterTrackHub generateBSTrack] Filtering $FILE for mapping quality of $MIN_MAPQ"
 	$SAMTOOLS view -bh -@ $RUN_THREAD -q $MIN_MAPQ -o $TEMP_BAM $FOLDER_FILE
