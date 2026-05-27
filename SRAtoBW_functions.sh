@@ -1367,12 +1367,12 @@ function generateBSTrack () {
 	zcat $BISMARK_OUTPUT | awk -v meth=$METHYL_OUTPUT -v cover=$COVER_OUTPUT '{print $1, $2, $3+1, $4 > meth; print $1, $2, $3+1, $5+$6 > cover}'
 	
 	printProgress "[masterTrackHub generateBSTrack] Converting to bigwigs"
-	$BEDGRAPHTOBW $METHYL_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$METHYL_BW
-	$BEDGRAPHTOBW $COVER_OUTPUT $CHROM_SIZES $TRACK_FOLDER/$COVER_BW
-	rm $COVER_OUTPUT $METHYL_OUTPUT
+	$BEDGRAPHTOBW $METHYL_OUTPUT $CHROM_SIZES $METHYL_BW
+	$BEDGRAPHTOBW $COVER_OUTPUT $CHROM_SIZES $COVER_BW
+#	rm $COVER_OUTPUT $METHYL_OUTPUT
 	printTrackHubUnstranded $FOLDER_NAME ${METHYL_BW//.bw/} $COLOUR
 	printTrackHubUnstranded $FOLDER_NAME ${COVER_BW//.bw/} $COLOUR
-	rm $TEMP_DIR/$FILE_NAME.*
+#	rm $TEMP_DIR/$FILE_NAME.*
 	#TODO Optional: keep more information? Lots of stuff being discarded
 }
 
